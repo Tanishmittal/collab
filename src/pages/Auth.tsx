@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, ArrowRight, Search, Star, Users, Zap } from "lucide-react";
-import AuthPageContent from "@/components/AuthPageContent";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,14 +83,14 @@ const Auth = () => {
       <Navbar />
 
       {/* Hero Section — split layout */}
-      <section className="relative overflow-hidden pb-8">
+      <section className="relative min-h-[calc(100vh-4rem)] flex items-center overflow-hidden py-12 md:py-16">
         {/* Background decorations */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full bg-primary/5 animate-float-slow" />
           <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full bg-accent/5 animate-float-slower" />
         </div>
 
-        <div className="container relative z-10 py-16 md:py-24">
+        <div className="container relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             {/* Left: Copy */}
             <motion.div
@@ -231,7 +230,6 @@ const Auth = () => {
         </div>
       </section>
 
-      <AuthPageContent />
     </div>
   );
 };
