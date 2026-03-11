@@ -18,7 +18,7 @@ const CampaignCard = ({ campaign, index = 0 }: { campaign: Campaign; index?: num
       className="glass-card rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
       onClick={() => navigate(`/campaign/${campaign.id}`)}
     >
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">

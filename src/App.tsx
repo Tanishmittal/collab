@@ -18,8 +18,35 @@ import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import OnboardingCheck from "./pages/OnboardingCheck";
 import NotFound from "./pages/NotFound";
+import MobileNav from "@/components/MobileNav";
+import { usePushNotifications } from "./hooks/usePushNotifications";
 
 const queryClient = new QueryClient();
+
+const AppRoutes = () => {
+  usePushNotifications();
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<Index />} />
+      <Route path="/campaigns" element={<Campaigns />} />
+      <Route path="/influencer/:id" element={<InfluencerProfile />} />
+      <Route path="/campaign/:id" element={<CampaignDetail />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/onboarding-check" element={<ProtectedRoute><OnboardingCheck /></ProtectedRoute>} />
+      <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+
+      {/* Protected routes */}
+      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/edit-profile" element={<ProtectedRoute><EditInfluencerProfile /></ProtectedRoute>} />
+      <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+      <Route path="/register" element={<ProtectedRoute><RegisterInfluencer /></ProtectedRoute>} />
+      <Route path="/register-brand" element={<ProtectedRoute><RegisterBrand /></ProtectedRoute>} />
+
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -28,25 +55,8 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<Index />} />
-            <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/influencer/:id" element={<InfluencerProfile />} />
-            <Route path="/campaign/:id" element={<CampaignDetail />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/onboarding-check" element={<ProtectedRoute><OnboardingCheck /></ProtectedRoute>} />
-            <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-
-            {/* Protected routes */}
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/edit-profile" element={<ProtectedRoute><EditInfluencerProfile /></ProtectedRoute>} />
-            <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
-            <Route path="/register" element={<ProtectedRoute><RegisterInfluencer /></ProtectedRoute>} />
-            <Route path="/register-brand" element={<ProtectedRoute><RegisterBrand /></ProtectedRoute>} />
-
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
+          <MobileNav />
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
