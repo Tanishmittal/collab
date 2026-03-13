@@ -97,7 +97,7 @@ const Messages = () => {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
+        <Navbar variant="minimal" title="Messages" />
         <div className="container max-w-4xl py-8 space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-24 rounded-xl" />
@@ -109,7 +109,7 @@ const Messages = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <Navbar variant="minimal" title="Messages" />
       <div className="container max-w-4xl py-8">
         <h1 className="font-display font-bold text-2xl text-foreground mb-6">Messages</h1>
 

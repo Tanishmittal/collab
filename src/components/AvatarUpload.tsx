@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
-import { Camera, Loader2 } from "lucide-react";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Camera, Loader2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -9,17 +8,18 @@ interface AvatarUploadProps {
   currentUrl?: string | null;
   initials: string;
   onUploaded: (url: string) => void;
+  onRemove?: () => void;
   size?: "md" | "lg";
 }
 
-const AvatarUpload = ({ userId, currentUrl, initials, onUploaded, size = "lg" }: AvatarUploadProps) => {
+const AvatarUpload = ({ userId, currentUrl, initials, onUploaded, onRemove, size = "lg" }: AvatarUploadProps) => {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl || null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const sizeClass = size === "lg" ? "w-24 h-24 text-3xl" : "w-14 h-14 text-lg";
-  const iconSize = size === "lg" ? 20 : 14;
+  const sizeClass = size === "lg" ? "w-44 h-44 text-4xl" : "w-16 h-16 text-xl";
+  const iconSize = size === "lg" ? 24 : 16;
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,21 +54,44 @@ const AvatarUpload = ({ userId, currentUrl, initials, onUploaded, size = "lg" }:
     toast({ title: "Photo updated!" });
   };
 
+  const handleRemove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPreviewUrl(null);
+    onRemove?.();
+    toast({ title: "Photo removed" });
+  };
+
   return (
     <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
-      <Avatar className={`${sizeClass} ring-4 ring-card shadow-xl`}>
+      <div className={`${sizeClass} relative rounded-lg overflow-hidden ring-4 ring-card shadow-xl`}>
         {previewUrl ? (
-          <AvatarImage src={previewUrl} alt="Profile photo" className="object-cover" />
-        ) : null}
-        <AvatarFallback className="gradient-primary text-primary-foreground font-display font-bold">
-          {initials}
-        </AvatarFallback>
-      </Avatar>
-      <div className="absolute inset-0 rounded-full bg-foreground/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="w-full h-full rounded-lg overflow-hidden bg-muted border border-muted">
+            <img
+              src={previewUrl}
+              alt="Profile photo"
+              className="w-full h-full object-cover object-center"
+            />
+          </div>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center gradient-primary text-primary-foreground font-display font-bold">
+            {initials}
+          </div>
+        )}
+      </div>
+      <div className="absolute inset-0 rounded-lg bg-foreground/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
         {uploading ? (
           <Loader2 size={iconSize} className="text-background animate-spin" />
         ) : (
-          <Camera size={iconSize} className="text-background" />
+          <div className="flex gap-2">
+            <Camera size={iconSize} className="text-background" />
+            {previewUrl && (
+              <X
+                size={iconSize}
+                className="text-background hover:text-destructive transition-colors"
+                onClick={handleRemove}
+              />
+            )}
+          </div>
         )}
       </div>
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />

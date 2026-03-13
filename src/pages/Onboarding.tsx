@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Sparkles, Users, Building2 } from "lucide-react";
+import { Sparkles, Users, Building2, HelpCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,8 +31,8 @@ const Onboarding = () => {
         </div>
       </div>
 
-      <div className="container max-w-2xl -mt-8 pb-16 relative z-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className="container max-w-4xl -mt-8 pb-16 relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -73,6 +73,28 @@ const Onboarding = () => {
                   <h2 className="text-xl font-bold text-foreground mb-2">I'm a Brand</h2>
                   <p className="text-sm text-muted-foreground">
                     Find the perfect influencers, create campaigns, and grow your business.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <Card
+              className="glass-card cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all group h-full"
+              onClick={() => navigate("/")}
+            >
+              <CardContent className="p-8 text-center flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-500 to-slate-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <HelpCircle className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-foreground mb-2">Decide Later</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Just browsing for now? Explore the platform and decide your role later.
                   </p>
                 </div>
               </CardContent>

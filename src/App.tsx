@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
-import Campaigns from "./pages/Campaigns";
 import Dashboard from "./pages/Dashboard";
 import InfluencerProfile from "./pages/InfluencerProfile";
 import RegisterInfluencer from "./pages/RegisterInfluencer";
@@ -18,6 +17,8 @@ import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import OnboardingCheck from "./pages/OnboardingCheck";
 import NotFound from "./pages/NotFound";
+import ProfileHub from "./pages/ProfileHub";
+import Settings from "./pages/Settings";
 import MobileNav from "@/components/MobileNav";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 
@@ -29,7 +30,6 @@ const AppRoutes = () => {
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<Index />} />
-      <Route path="/campaigns" element={<Campaigns />} />
       <Route path="/influencer/:id" element={<InfluencerProfile />} />
       <Route path="/campaign/:id" element={<CampaignDetail />} />
       <Route path="/auth" element={<Auth />} />
@@ -42,6 +42,8 @@ const AppRoutes = () => {
       <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
       <Route path="/register" element={<ProtectedRoute><RegisterInfluencer /></ProtectedRoute>} />
       <Route path="/register-brand" element={<ProtectedRoute><RegisterBrand /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfileHub /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

@@ -107,7 +107,7 @@ const InfluencerProfile = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
+        <Navbar variant="minimal" title="Profile" />
         <div className="h-48 md:h-56 bg-muted" />
         <div className="container -mt-16 relative z-10 space-y-4">
           <Skeleton className="h-80 rounded-xl" />
@@ -120,7 +120,7 @@ const InfluencerProfile = () => {
   if (!influencer) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
+        <Navbar variant="minimal" title="Profile" />
         <div className="container py-20 text-center">
           <div className="text-5xl mb-4">😕</div>
           <h1 className="font-display font-bold text-2xl text-foreground">Influencer not found</h1>
@@ -143,7 +143,7 @@ const InfluencerProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <Navbar variant="minimal" title="Profile" />
 
       {/* Hero Banner */}
       <div className={`h-48 md:h-56 relative overflow-hidden bg-gradient-to-r ${gradientClass}`}>
@@ -162,13 +162,19 @@ const InfluencerProfile = () => {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <Card className="glass-card overflow-visible">
                 <CardContent className="p-6 pt-0">
-                  <div className="flex flex-col items-center -mt-12">
-                    <Avatar className="w-28 h-28 ring-4 ring-card shadow-xl">
-                      {avatarUrl ? <AvatarImage src={avatarUrl} alt={influencer.name} className="object-cover" /> : null}
-                      <AvatarFallback className="gradient-primary text-primary-foreground font-display font-bold text-4xl">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
+                  <div className="flex flex-col items-center">
+                    <div className="w-32 h-32 -mt-16 relative group">
+                      <div className="absolute inset-0 bg-card rounded-[2rem] ring-4 ring-background shadow-2xl" />
+                      <div className="absolute inset-0 overflow-hidden rounded-[2rem]">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={influencer.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                        ) : (
+                          <div className="w-full h-full gradient-primary flex items-center justify-center text-primary-foreground font-display font-bold text-4xl">
+                            {initials}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     <h1 className="font-display font-bold text-xl mt-3 text-foreground flex items-center gap-2">
                       {influencer.name}
                       {isVerified && (

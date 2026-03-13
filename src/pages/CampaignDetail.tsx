@@ -174,7 +174,7 @@ const CampaignDetail = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
+        <Navbar variant="minimal" title="Campaign" />
         <div className="container max-w-3xl py-12 space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-64 rounded-xl" />
@@ -186,11 +186,11 @@ const CampaignDetail = () => {
   if (!campaign) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
+        <Navbar variant="minimal" title="Campaign" />
         <div className="container py-20 text-center">
           <div className="text-5xl mb-4">😕</div>
           <h1 className="font-display font-bold text-2xl text-foreground">Campaign not found</h1>
-          <Link to="/campaigns" className="text-primary mt-4 inline-block hover:underline">← Back to Campaigns</Link>
+          <Link to="/?tab=campaigns" className="text-primary mt-4 inline-block hover:underline">← Back to Campaigns</Link>
         </div>
       </div>
     );
@@ -202,7 +202,7 @@ const CampaignDetail = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <Navbar variant="minimal" title="Campaign" />
 
       <div className="container max-w-3xl py-8">
         <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/")}>

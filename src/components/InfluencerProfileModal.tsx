@@ -28,10 +28,15 @@ export default function InfluencerProfileModal({ profile, children }: Influencer
           <DialogTitle>Influencer Profile</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center gap-4 py-4">
-          <Avatar className="w-24 h-24">
-            <AvatarImage src={profile.avatar_url || ""} />
-            <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
-          </Avatar>
+          <div className="w-28 h-28 relative overflow-hidden rounded-[1.5rem] ring-4 ring-muted shadow-lg">
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} className="w-full h-full object-cover" />
+            ) : (
+               <div className="w-full h-full bg-muted flex items-center justify-center text-3xl font-bold">
+                 {initials}
+               </div>
+            )}
+          </div>
           
           <div className="text-center">
             <h3 className="text-xl font-bold">{profile.name}</h3>

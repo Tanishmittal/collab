@@ -129,7 +129,7 @@ const RegisterBrand = () => {
         title: "🚀 Brand Account Created!",
         description: "You can now post campaigns and discover influencers.",
       });
-      setTimeout(() => navigate("/campaigns"), 1500);
+      setTimeout(() => navigate("/"), 1500);
     }
   };
 

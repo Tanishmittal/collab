@@ -83,10 +83,14 @@ const CampaignCard = ({ campaign, index = 0 }: { campaign: Campaign; index?: num
               </div>
             </div>
             <div className="text-right">
-              <p className="text-[9px] uppercase tracking-[0.2em] text-gray-500 font-bold mb-1.5">Closes In</p>
               <div className="flex items-center justify-end gap-1.5 text-gray-600 text-xs font-bold uppercase tracking-wider bg-white px-2.5 py-1.5 rounded-lg border border-gray-200 shadow-sm">
                 <Clock size={12} className={isUrgent ? "text-rose-500" : "text-teal-600"} />
-                3 Days
+                {campaign.deadline ? (
+                  (() => {
+                    const days = Math.max(0, Math.ceil((new Date(campaign.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
+                    return days === 0 ? "Closing Soon" : `${days} Day${days > 1 ? "s" : ""}`;
+                  })()
+                ) : "3 Days"}
               </div>
             </div>
           </div>

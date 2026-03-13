@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, TrendingUp, MapPin, Star } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import type { Influencer, Campaign } from "@/data/mockData";
@@ -28,7 +28,8 @@ const stats = [
 ];
 
 const Index = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("all");
   const [selectedNiche, setSelectedNiche] = useState("all");
@@ -37,66 +38,85 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<"influencers" | "campaigns">("influencers");
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
   const [ownInfluencerId, setOwnInfluencerId] = useState<string | null>(null);
+  const [ownBrandId, setOwnBrandId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "campaigns" || tab === "influencers") {
+      setActiveTab(tab as "influencers" | "campaigns");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
-      const [infRes, campRes] = await Promise.all([
-        supabase.from("influencer_profiles").select("*"),
-        supabase.from("campaigns").select("*").order("created_at", { ascending: false })
-      ]);
+      // Don't start data fetching until auth state is known
+      if (authLoading) return;
+      
+      setDataLoading(true);
+      try {
+        const [infRes, campRes, brandRes] = await Promise.all([
+          supabase.from("influencer_profiles").select("*"),
+          supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
+          supabase.from("brand_profiles").select("*")
+        ]);
 
-      if (!infRes.error && infRes.data) {
-        setInfluencers(infRes.data.map((row) => ({
-          id: row.id,
-          name: row.name,
-          city: row.city,
-          niche: row.niche,
-          followers: row.followers,
-          engagementRate: parseFloat(row.engagement_rate || "4.5"),
-          platforms: row.platforms || [],
-          priceReel: row.price_reel,
-          priceStory: row.price_story,
-          priceVisit: row.price_visit,
-          avatar: (row as any).avatar_url || "",
-          coverUrl: (row as any).cover_url || "",
-          rating: Number(row.rating) || 4.5,
-          completedCampaigns: row.completed_campaigns || 0,
-          bio: row.bio || "",
-          isVerified: (row as any).is_verified || false
-        }) as Influencer));
+        if (!infRes.error && infRes.data) {
+          setInfluencers(infRes.data.map((row) => ({
+            id: row.id,
+            name: row.name,
+            city: row.city,
+            niche: row.niche,
+            followers: row.followers,
+            engagementRate: parseFloat(row.engagement_rate || "4.5"),
+            platforms: row.platforms || [],
+            priceReel: row.price_reel,
+            priceStory: row.price_story,
+            priceVisit: row.price_visit,
+            avatar: (row as any).avatar_url || "",
+            coverUrl: (row as any).cover_url || "",
+            rating: Number(row.rating) || 4.5,
+            completedCampaigns: row.completed_campaigns || 0,
+            bio: row.bio || "",
+            isVerified: (row as any).is_verified || false
+          }) as Influencer));
+        }
+
+        if (!campRes.error && campRes.data) {
+          setCampaigns(campRes.data.map((row) => ({
+            id: row.id,
+            brand: row.brand,
+            brandLogo: row.brand_logo || "🏪",
+            city: row.city,
+            budget: row.budget,
+            influencersNeeded: row.influencers_needed,
+            influencersApplied: row.influencers_applied,
+            deliverables: row.deliverables || [],
+            niche: row.niche,
+            status: row.status as Campaign["status"] || "active",
+            postedAt: new Date(row.created_at).toLocaleDateString(),
+            description: row.description || ""
+          })));
+        }
+
+        if (user) {
+          const ownInf = infRes.data?.find((r) => r.user_id === user.id);
+          const ownBrand = brandRes.data?.find((r) => r.user_id === user.id);
+          setOwnInfluencerId(ownInf?.id ?? null);
+          setOwnBrandId(ownBrand?.id ?? null);
+        } else {
+          setOwnInfluencerId(null);
+          setOwnBrandId(null);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setDataLoading(false);
       }
-
-      if (!campRes.error && campRes.data) {
-        setCampaigns(campRes.data.map((row) => ({
-          id: row.id,
-          brand: row.brand,
-          brandLogo: row.brand_logo || "🏪",
-          city: row.city,
-          budget: row.budget,
-          influencersNeeded: row.influencers_needed,
-          influencersApplied: row.influencers_applied,
-          deliverables: row.deliverables || [],
-          niche: row.niche,
-          status: row.status as Campaign["status"] || "active",
-          postedAt: new Date(row.created_at).toLocaleDateString(),
-          description: row.description || ""
-        })));
-      }
-
-      if (user && infRes.data) {
-        const own = infRes.data.find((r) => r.user_id === user.id);
-        setOwnInfluencerId(own?.id ?? null);
-      } else {
-        setOwnInfluencerId(null);
-      }
-
-      setLoading(false);
     };
     fetchData();
-  }, [user]);
+  }, [user, authLoading]);
 
   const filteredInfluencers = useMemo(() => {
     let result = influencers.filter((i) => {
@@ -141,7 +161,7 @@ const Index = () => {
     <div className="min-h-screen bg-white text-gray-900 selection:bg-teal-500/30">
       <Navbar />
 
-      {!user && <Hero />}
+      {!authLoading && !user && <Hero />}
 
       <DiscoverySection
         searchQuery={searchQuery}
@@ -156,15 +176,16 @@ const Index = () => {
         setActiveTab={setActiveTab}
         verifiedOnly={verifiedOnly}
         setVerifiedOnly={setVerifiedOnly}
-        loading={loading}
+        loading={dataLoading}
         influencers={influencers}
         campaigns={campaigns}
         filteredInfluencers={filteredInfluencers}
         filteredCampaigns={filteredCampaigns}
         ownInfluencerId={ownInfluencerId}
+        ownBrandId={ownBrandId}
       />
 
-      {!user && (
+      {!authLoading && !user && (
         <>
           <FeaturesSection />
           <HowItWorksSection />
@@ -173,9 +194,7 @@ const Index = () => {
         </>
       )}
 
-
-
-      {!user && <CTASection />}
+      {!authLoading && !user && <CTASection />}
     </div>
   );
 };

@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { platform, url: socialUrl } = await req.json();
+    const { platform, url: socialUrl, verificationCode: manualCode } = await req.json();
 
     if (!platform || !socialUrl) {
       return new Response(JSON.stringify({ success: false, error: "Platform and URL are required" }), {
@@ -55,21 +55,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get user's verification code
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("influencer_profiles")
-      .select("verification_code")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    let verificationCode = manualCode;
 
-    if (profileError || !profile) {
-      return new Response(JSON.stringify({ success: false, error: "Profile not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // If manualCode is not provided, fetch from database (legacy/edit mode)
+    if (!verificationCode) {
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from("influencer_profiles")
+        .select("verification_code")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        return new Response(JSON.stringify({ success: false, error: "Profile not found and no verification code provided" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      verificationCode = profile.verification_code;
     }
-
-    const verificationCode = profile.verification_code;
 
     const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
     if (!firecrawlKey) {

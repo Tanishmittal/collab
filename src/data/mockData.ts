@@ -29,6 +29,7 @@ export interface Campaign {
   niche: string;
   status: "active" | "completed" | "draft";
   postedAt: string;
+  deadline?: string;
   description: string;
 }
 

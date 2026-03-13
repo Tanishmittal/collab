@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Building2, LogOut, Send, UserCircle, BarChart3, MessageSquare } from "lucide-react";
+import { User, Building2, LogOut, UserCircle, BarChart3, MessageSquare, Bell, ArrowLeft, Home, Search, Settings2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,174 +13,195 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import CreateCampaignModal from "@/components/CreateCampaignModal";
 import ListInfluencerModal from "@/components/ListInfluencerModal";
+import JoinBrandModal from "@/components/JoinBrandModal"; // Added this import
 
-const Navbar = () => {
+interface NavbarProps {
+  variant?: "full" | "minimal";
+  title?: string;
+}
+
+const Navbar = ({ variant = "full", title }: NavbarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const isAuthPage = location.pathname === "/auth";
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const { user, signOut } = useAuth();
-  const [influencerProfileId, setInfluencerProfileId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user) { setInfluencerProfileId(null); return; }
-    supabase
-      .from("influencer_profiles")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }) => setInfluencerProfileId(data?.id ?? null));
-  }, [user]);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 80);
-    window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  const { user, loading, influencerProfileId, brandProfileId, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
 
+  const desktopNavLinks = [
+    { label: "Home", path: "/", icon: Home },
+    { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
+    { label: "Messages", path: "/messages", icon: MessageSquare },
+  ];
+
   return (
-    <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-gray-200 shadow-sm pt-[var(--safe-area-top)] transition-all duration-300">
-      <div className="container flex items-center justify-between h-16 md:h-20">
-        <Link to="/" className="flex items-center gap-3 group">
+    <nav className="sticky top-0 z-50 bg-white backdrop-blur-xl transition-all duration-300">
 
-          <span className="font-display font-extrabold text-2xl tracking-tight text-gray-900 group-hover:text-teal-500 transition-colors">InfluFlow</span>
-        </Link>
-
-        <div className="hidden md:flex items-center gap-4">
-          {user ? (
-            <>
-              <CreateCampaignModal
-                trigger={
-                  <Button variant="outline" size="sm" className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20 rounded-xl h-10 px-5 font-bold uppercase tracking-wider text-[11px] gap-2">
-                    <Building2 className="w-4 h-4 text-teal-400" /> Create Campaign
-                  </Button>
-                }
-              />
-              {!influencerProfileId && (
-                <ListInfluencerModal
-                  trigger={
-                    <Button variant="outline" size="sm" className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20 rounded-xl h-10 px-5 font-bold uppercase tracking-wider text-[11px] gap-2">
-                      <User className="w-4 h-4 text-teal-400" /> List as Influencer
-                    </Button>
-                  }
-                />
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20 rounded-xl h-10 px-4 font-bold gap-3 border-none">
-                    <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-black shadow-[0_0_15px_rgba(20,184,166,0.2)]">
-                      {(user.user_metadata?.display_name || user.email || "U").charAt(0).toUpperCase()}
-                    </div>
-                    <span className="max-w-[100px] truncate">
-                      {user.user_metadata?.display_name || user.email?.split("@")[0]}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-[#0a1224]/95 backdrop-blur-2xl border-white/5 p-2 rounded-2xl shadow-2xl">
-                  <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer hover:bg-white/5 text-white/80 transition-colors">
-                      <BarChart3 className="w-4 h-4 text-teal-400" />
-                      <span className="font-bold uppercase tracking-wider text-[11px]">Dashboard</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  {influencerProfileId && (
-                    <DropdownMenuItem asChild>
-                      <Link to={`/influencer/${influencerProfileId}`} className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer hover:bg-white/5 text-white/80 transition-colors">
-                        <UserCircle className="w-4 h-4 text-teal-400" />
-                        <span className="font-bold uppercase tracking-wider text-[11px]">My Profile</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem asChild>
-                    <Link to="/messages" className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer hover:bg-white/5 text-white/80 transition-colors">
-                      <MessageSquare className="w-4 h-4 text-teal-400" />
-                      <span className="font-bold uppercase tracking-wider text-[11px]">Messages</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-white/5 my-2" />
-                  <DropdownMenuItem onClick={handleSignOut} className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer hover:bg-red-500/10 text-red-400 transition-colors font-bold uppercase tracking-wider text-[11px]">
-                    <LogOut className="w-4 h-4" /> Sign Out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          ) : (
-            <Button
-              className="bg-white/5 border border-white/10 backdrop-blur-md text-black hover:bg-white hover:text-black hover:border-white rounded-2xl h-11 px-8 font-bold uppercase tracking-[0.15em] text-[10px] transition-all duration-500 shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[40px_0_40px_rgba(255,255,255,0.2)] hover:-translate-y-0.5"
-              onClick={() => navigate(isAuthPage ? "/" : "/auth")}
+      {/* ── MOBILE HEADER ── */}
+      <div className="md:hidden">
+        {variant === "minimal" ? (
+          /* Minimal: back arrow + page title */
+          <div className="container flex items-center h-14 gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-2 -ml-2 text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
             >
-              {isAuthPage ? "Home" : "Sign In"}
-            </Button>
-          )}
-        </div>
-
-        <button className="md:hidden text-white p-2 hover:bg-white/5 rounded-lg transition-colors" onClick={() => setMobileOpen(!mobileOpen)}>
-          {mobileOpen ? <X size={28} /> : <Menu size={28} />}
-        </button>
-      </div>
-
-      {mobileOpen && (
-        <div className="md:hidden border-t bg-card p-4 space-y-2">
-          <div className="flex flex-col gap-2">
-            {user ? (
-              <>
-                <CreateCampaignModal
-                  trigger={
-                    <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                      <Building2 className="w-4 h-4" /> Create Campaign
-                    </Button>
-                  }
-                  onCreated={() => setMobileOpen(false)}
-                />
-                {!influencerProfileId && (
-                  <ListInfluencerModal
-                    trigger={
-                      <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                        <User className="w-4 h-4" /> List as Influencer
-                      </Button>
-                    }
-                    onCreated={() => setMobileOpen(false)}
-                  />
-                )}
-                <Link to="/dashboard" onClick={() => setMobileOpen(false)}>
-                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2">
-                    <BarChart3 className="w-4 h-4" /> Dashboard
-                  </Button>
-                </Link>
-                {influencerProfileId && (
-                  <Link to={`/influencer/${influencerProfileId}`} onClick={() => setMobileOpen(false)}>
-                    <Button variant="ghost" size="sm" className="w-full justify-start gap-2">
-                      <UserCircle className="w-4 h-4" /> My Profile
-                    </Button>
-                  </Link>
-                )}
-                <Link to="/messages" onClick={() => setMobileOpen(false)}>
-                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2">
-                    <MessageSquare className="w-4 h-4" /> Messages
-                  </Button>
-                </Link>
-                <Button variant="outline" size="sm" onClick={() => { handleSignOut(); setMobileOpen(false); }}>
-                  Sign Out
-                </Button>
-              </>
-            ) : (
-              <Button 
-                variant="outline" 
-                className="w-full bg-white/5 border-white/10 text-white rounded-xl py-6 font-bold uppercase tracking-wider text-xs" 
-                onClick={() => { navigate(isAuthPage ? "/" : "/auth"); setMobileOpen(false); }}
-              >
-                {isAuthPage ? "Home" : "Sign In"}
-              </Button>
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className="font-display font-bold text-lg text-slate-900 truncate">{title || "Back"}</h1>
+            <div className="flex-1" />
+            {user && (
+              <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors relative">
+                <Bell size={18} />
+                <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full" />
+              </button>
             )}
           </div>
+        ) : (
+          /* Full: logo + sign-in / bell */
+          <div className="container flex items-center justify-between h-14">
+            <Link to="/" className="flex items-center gap-2 group">
+              <span className="font-display font-extrabold text-xl tracking-tight text-gray-900 group-hover:text-teal-500 transition-colors">InfluFlow</span>
+            </Link>
+            <div className="flex items-center gap-1">
+              {user ? (
+                <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative">
+                  <Bell size={20} />
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+                </button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl font-bold text-xs"
+                  onClick={() => navigate(isAuthPage ? "/" : "/auth")}
+                >
+                  {isAuthPage ? "Home" : "Sign In"}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP HEADER (always global) ── */}
+      <div className="hidden md:block">
+        <div className="container flex items-center justify-between h-16 lg:h-20">
+          <Link to="/" className="flex items-center gap-3 group shrink-0">
+            <span className="font-display font-extrabold text-2xl tracking-tight text-gray-900 group-hover:text-teal-500 transition-colors">InfluFlow</span>
+          </Link>
+
+          {/* Right side content: Nav links + actions */}
+          <div className="flex items-center gap-6">
+            {/* Nav links */}
+            <div className="flex items-center gap-1">
+              {desktopNavLinks.map((link) => {
+                const isActive = location.pathname === link.path;
+                return (
+                  <Link
+                    key={link.path}
+                    to={link.path}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      }`}
+                  >
+                    <link.icon size={16} />
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Action buttons + avatar */}
+            <div className="flex items-center gap-3 shrink-0">
+              {user ? (
+                <>
+                  {!loading && (
+                    <>
+                      {brandProfileId ? (
+                        <CreateCampaignModal
+                          trigger={
+                            <Button size="sm" className="gradient-primary border-0 text-primary-foreground rounded-xl h-9 px-4 font-semibold text-xs gap-2">
+                              <Building2 className="w-4 h-4" /> New Campaign
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <JoinBrandModal
+                          trigger={
+                            <Button size="sm" className="gradient-primary border-0 text-primary-foreground rounded-xl h-9 px-4 font-semibold text-xs gap-2">
+                              <Building2 className="w-4 h-4" /> Join as Brand
+                            </Button>
+                          }
+                        />
+                      )}
+                      {!influencerProfileId && (
+                        <ListInfluencerModal
+                          trigger={
+                            <Button variant="outline" size="sm" className="rounded-xl h-9 px-4 font-semibold text-xs gap-2">
+                              <User className="w-4 h-4" /> Join as Influencer
+                            </Button>
+                          }
+                        />
+                      )}
+                    </>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="rounded-xl h-9 px-3 gap-2">
+                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
+                          {(user.user_metadata?.display_name || user.email || "U").charAt(0).toUpperCase()}
+                        </div>
+                        <span className="max-w-[100px] truncate text-sm font-medium text-gray-700">
+                          {user.user_metadata?.display_name || user.email?.split("@")[0]}
+                        </span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52 p-1.5 rounded-xl">
+                      {influencerProfileId && (
+                        <DropdownMenuItem asChild>
+                          <Link to={`/influencer/${influencerProfileId}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
+                            <UserCircle className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium">My Profile</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem asChild>
+                        <Link to="/profile" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
+                          <User className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-medium">Profile Hub</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/settings" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
+                          <Settings2 className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-medium">Settings</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleSignOut} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer text-red-500 hover:text-red-600">
+                        <LogOut className="w-4 h-4" />
+                        <span className="text-sm font-medium">Sign Out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <Button
+                  className="gradient-primary border-0 text-primary-foreground rounded-xl h-10 px-6 font-semibold text-sm"
+                  onClick={() => navigate(isAuthPage ? "/" : "/auth")}
+                >
+                  {isAuthPage ? "Home" : "Sign In"}
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </nav>
   );
 };

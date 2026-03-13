@@ -1,10 +1,13 @@
 import { motion } from "framer-motion";
-import { Users, Zap, Plus } from "lucide-react";
+import { Users, Zap, Plus, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import SearchFilters from "@/components/SearchFilters";
 import InfluencerCard from "@/components/InfluencerCard";
 import CampaignCard from "@/components/CampaignCard";
+import ListInfluencerModal from "@/components/ListInfluencerModal";
+import CreateCampaignModal from "@/components/CreateCampaignModal";
+import JoinBrandModal from "@/components/JoinBrandModal";
 import type { Influencer, Campaign } from "@/data/mockData";
 import { useNavigate } from "react-router-dom";
 
@@ -27,6 +30,7 @@ interface DiscoverySectionProps {
   filteredInfluencers: Influencer[];
   filteredCampaigns: Campaign[];
   ownInfluencerId: string | null;
+  ownBrandId: string | null;
 }
 
 const DiscoverySection = ({
@@ -48,6 +52,7 @@ const DiscoverySection = ({
   filteredInfluencers,
   filteredCampaigns,
   ownInfluencerId,
+  ownBrandId,
 }: DiscoverySectionProps) => {
   const navigate = useNavigate();
 
@@ -105,12 +110,13 @@ const DiscoverySection = ({
                 <p className="text-muted-foreground mt-2 max-w-md mx-auto">
                   Be the first creator on the platform! Register your profile and start getting discovered by brands.
                 </p>
-                <Button 
-                  className="mt-6 gradient-primary border-0 text-primary-foreground" 
-                  onClick={() => navigate("/register/influencer")}
-                >
-                  <Zap size={16} className="mr-2" /> Register as Influencer
-                </Button>
+                <ListInfluencerModal
+                  trigger={
+                    <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
+                      <Zap size={16} className="mr-2" /> Register as Influencer
+                    </Button>
+                  }
+                />
               </>
             ) : (
               <>
@@ -148,12 +154,23 @@ const DiscoverySection = ({
               <p className="text-muted-foreground mt-2 max-w-md mx-auto">
                 Be the first brand to post a campaign and connect with local influencers.
               </p>
-              <Button 
-                className="mt-6 gradient-primary border-0 text-primary-foreground" 
-                onClick={() => navigate("/campaigns")}
-              >
-                <Plus size={16} className="mr-2" /> Post a Campaign
-              </Button>
+              {ownBrandId ? (
+                <CreateCampaignModal
+                  trigger={
+                    <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
+                      <Plus size={16} className="mr-2" /> Post a Campaign
+                    </Button>
+                  }
+                />
+              ) : (
+                <JoinBrandModal
+                  trigger={
+                    <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
+                      <Building2 className="mr-2 w-4 h-4" /> Join as Brand
+                    </Button>
+                  }
+                />
+              )}
             </>
           ) : (
             <>

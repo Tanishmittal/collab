@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Building2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import StarField from "@/components/ui/StarField";
 
 const CTASection = () => {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ const CTASection = () => {
         transition={{ duration: 0.8, ease: "easeOut" }}
         className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-gray-900 to-gray-800 p-12 md:p-20 text-center shadow-2xl"
       >
+        <StarField className="opacity-50" />
         {/* Animated background elements */}
         <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-[40rem] h-[40rem] bg-teal-500/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/2 w-[30rem] h-[30rem] bg-teal-400/10 rounded-full blur-[80px] pointer-events-none" />

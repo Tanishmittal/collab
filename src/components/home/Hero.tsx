@@ -143,7 +143,7 @@ const Hero = () => {
   };
 
   return (
-    <section className="relative overflow-hidden bg-[#050505] text-white">
+    <section className="relative overflow-hidden bg-[#050505] text-white container rounded-full md:rounded-[7vw]">
       <StarField />
 
       <main className="relative min-h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] flex items-center justify-center px-6 py-12 md:py-16">
@@ -168,7 +168,7 @@ const Hero = () => {
               </h1>
 
               <p className="text-gray-400 text-base md:text-xl max-w-lg mb-8 md:mb-12 leading-relaxed">
-                Connect with influencers who don't just post — they command attention. Our deep-reel technology lets you vet style, vibe, and metrics in seconds.
+                Connect with influencers who don't just post but they command attention.
               </p>
 
               <div className="flex flex-wrap items-center gap-6 xl:gap-8 w-full mt-6">
@@ -297,6 +297,7 @@ const Hero = () => {
         select option { background-color: #050505; color: white; }
       `}} />
     </section>
+
   );
 };
 

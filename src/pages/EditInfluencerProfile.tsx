@@ -152,7 +152,7 @@ const EditInfluencerProfile = () => {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
+        <Navbar variant="minimal" title="Edit Profile" />
         <div className="container max-w-2xl py-12 space-y-4">
           <Skeleton className="h-10 w-48" />
           <Skeleton className="h-64 rounded-xl" />
@@ -164,7 +164,7 @@ const EditInfluencerProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <Navbar variant="minimal" title="Edit Profile" />
 
       <div className="gradient-hero py-10">
         <div className="container max-w-2xl">
