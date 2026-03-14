@@ -37,61 +37,66 @@ const Messages = () => {
     if (!user) return;
     setLoading(true);
 
-    // Get all messages involving this user
-    const { data: messages } = await supabase
-      .from("messages")
-      .select("*")
-      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-      .order("created_at", { ascending: false });
+    try {
+      // Get all messages involving this user
+      const { data: messages } = await supabase
+        .from("messages")
+        .select("*")
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order("created_at", { ascending: false });
 
-    if (!messages || messages.length === 0) {
+      if (!messages || messages.length === 0) {
+        setConversations([]);
+        return;
+      }
+
+      // Group by application_id
+      const grouped = new Map<string, any[]>();
+      for (const msg of messages) {
+        const key = msg.application_id;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(msg);
+      }
+
+      const convos: Conversation[] = [];
+      for (const [appId, msgs] of grouped) {
+        const latest = msgs[0]; // already sorted desc
+        const otherUserId = latest.sender_id === user.id ? latest.receiver_id : latest.sender_id;
+        const unreadCount = msgs.filter((m: any) => m.receiver_id === user.id && !m.read).length;
+
+        // Get other user's name
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("user_id", otherUserId)
+          .maybeSingle();
+
+        // Get campaign brand
+        const { data: campaign } = await supabase
+          .from("campaigns")
+          .select("brand")
+          .eq("id", latest.campaign_id)
+          .maybeSingle();
+
+        convos.push({
+          applicationId: appId,
+          campaignId: latest.campaign_id,
+          campaignBrand: campaign?.brand || "Campaign",
+          otherUserId,
+          otherUserName: profile?.display_name || "User",
+          lastMessage: latest.content,
+          lastMessageTime: latest.created_at,
+          unreadCount,
+        });
+      }
+
+      setConversations(convos);
+    } catch (error) {
+      console.error("Failed to fetch conversations:", error);
       setConversations([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Group by application_id
-    const grouped = new Map<string, any[]>();
-    for (const msg of messages) {
-      const key = msg.application_id;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key)!.push(msg);
-    }
-
-    const convos: Conversation[] = [];
-    for (const [appId, msgs] of grouped) {
-      const latest = msgs[0]; // already sorted desc
-      const otherUserId = latest.sender_id === user.id ? latest.receiver_id : latest.sender_id;
-      const unreadCount = msgs.filter((m: any) => m.receiver_id === user.id && !m.read).length;
-
-      // Get other user's name
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("user_id", otherUserId)
-        .maybeSingle();
-
-      // Get campaign brand
-      const { data: campaign } = await supabase
-        .from("campaigns")
-        .select("brand")
-        .eq("id", latest.campaign_id)
-        .maybeSingle();
-
-      convos.push({
-        applicationId: appId,
-        campaignId: latest.campaign_id,
-        campaignBrand: campaign?.brand || "Campaign",
-        otherUserId,
-        otherUserName: profile?.display_name || "User",
-        lastMessage: latest.content,
-        lastMessageTime: latest.created_at,
-        unreadCount,
-      });
-    }
-
-    setConversations(convos);
-    setLoading(false);
   };
 
   if (authLoading || loading) {

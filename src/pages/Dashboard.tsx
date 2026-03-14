@@ -93,55 +93,60 @@ const Dashboard = () => {
   const fetchData = async () => {
     setLoading(true);
 
-    // Fetch profiles to determine identity
-    const [infRes, brandRes] = await Promise.all([
-      supabase.from("influencer_profiles").select("name, followers, rating, engagement_rate").eq("user_id", user!.id).maybeSingle(),
-      supabase.from("brand_profiles").select("id").eq("user_id", user!.id).maybeSingle(),
-    ]);
+    try {
+      // Fetch profiles to determine identity
+      const [infRes, brandRes] = await Promise.all([
+        supabase.from("influencer_profiles").select("name, followers, rating, engagement_rate").eq("user_id", user!.id).maybeSingle(),
+        supabase.from("brand_profiles").select("id").eq("user_id", user!.id).maybeSingle(),
+      ]);
 
-    const hasInf = !!infRes.data;
-    const hasBrand = !!brandRes.data; 
-    setHasInfluencerProfile(hasInf);
-    setHasBrandProfile(hasBrand);
-    if (infRes.data) setInfluencerStats(infRes.data as any);
+      const hasInf = !!infRes.data;
+      const hasBrand = !!brandRes.data;
+      setHasInfluencerProfile(hasInf);
+      setHasBrandProfile(hasBrand);
+      if (infRes.data) setInfluencerStats(infRes.data as any);
 
-    // Default to influencer view if they have it, brand otherwise
-    if (hasInf && !hasBrand) setActiveRole("influencer");
-    else if (hasBrand) setActiveRole("brand");
+      // Default to influencer view if they have it, brand otherwise
+      if (hasInf && !hasBrand) setActiveRole("influencer");
+      else if (hasBrand) setActiveRole("brand");
 
-    const [campaignsRes, appsRes, myAppsRes, bookingsRes] = await Promise.all([
-      supabase.from("campaigns").select("*").eq("user_id", user!.id).order("created_at", { ascending: false }),
-      supabase.from("campaign_applications").select("*, influencer_profiles(*)").order("created_at", { ascending: false }),
-      supabase.from("campaign_applications")
-        .select("id, message, status, created_at, campaigns(id, brand, brand_logo, city, budget, niche, description, status)")
-        .eq("user_id", user!.id).order("created_at", { ascending: false }),
-      supabase.from("bookings" as any).select("*")
-        .or(`brand_user_id.eq.${user!.id},influencer_user_id.eq.${user!.id}`)
-        .order("created_at", { ascending: false }),
-    ]);
+      const [campaignsRes, appsRes, myAppsRes, bookingsRes] = await Promise.all([
+        supabase.from("campaigns").select("*").eq("user_id", user!.id).order("created_at", { ascending: false }),
+        supabase.from("campaign_applications").select("*, influencer_profiles(*)").order("created_at", { ascending: false }),
+        supabase.from("campaign_applications")
+          .select("id, message, status, created_at, campaigns(id, brand, brand_logo, city, budget, niche, description, status)")
+          .eq("user_id", user!.id).order("created_at", { ascending: false }),
+        supabase.from("bookings" as any).select("*")
+          .or(`brand_user_id.eq.${user!.id},influencer_user_id.eq.${user!.id}`)
+          .order("created_at", { ascending: false }),
+      ]);
 
-    if (campaignsRes.data) setCampaigns(campaignsRes.data as CampaignRow[]);
+      if (campaignsRes.data) setCampaigns(campaignsRes.data as CampaignRow[]);
 
-    if (appsRes.data && campaignsRes.data) {
-      const campaignIds = new Set(campaignsRes.data.map(c => c.id));
-      setApplications((appsRes.data as ApplicationRow[]).filter(a => campaignIds.has(a.campaign_id)));
+      if (appsRes.data && campaignsRes.data) {
+        const campaignIds = new Set(campaignsRes.data.map(c => c.id));
+        setApplications((appsRes.data as ApplicationRow[]).filter(a => campaignIds.has(a.campaign_id)));
+      }
+
+      if (myAppsRes.data) setMyApplications(myAppsRes.data as MyApplicationRow[]);
+
+      if (bookingsRes.data) {
+        const enriched = await Promise.all(
+          (bookingsRes.data as any[]).map(async (b: any) => {
+            const otherId = b.brand_user_id === user!.id ? b.influencer_user_id : b.brand_user_id;
+            const { data: profile } = await supabase.from("profiles").select("display_name").eq("user_id", otherId).maybeSingle();
+            const { data: infProfile } = await supabase.from("influencer_profiles").select("name").eq("id", b.influencer_profile_id).maybeSingle();
+            return { ...b, influencer_name: infProfile?.name || "Influencer", brand_name: profile?.display_name || "Brand" } as BookingRow;
+          })
+        );
+        setBookings(enriched);
+      }
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+      toast({ title: "Could not load dashboard", description: "Please refresh and try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-
-    if (myAppsRes.data) setMyApplications(myAppsRes.data as MyApplicationRow[]);
-
-    if (bookingsRes.data) {
-      const enriched = await Promise.all(
-        (bookingsRes.data as any[]).map(async (b: any) => {
-          const otherId = b.brand_user_id === user!.id ? b.influencer_user_id : b.brand_user_id;
-          const { data: profile } = await supabase.from("profiles").select("display_name").eq("user_id", otherId).maybeSingle();
-          const { data: infProfile } = await supabase.from("influencer_profiles").select("name").eq("id", b.influencer_profile_id).maybeSingle();
-          return { ...b, influencer_name: infProfile?.name || "Influencer", brand_name: profile?.display_name || "Brand" } as BookingRow;
-        })
-      );
-      setBookings(enriched);
-    }
-
-    setLoading(false);
   };
 
   // ---- Stats ----
