@@ -93,7 +93,8 @@ const Dashboard = () => {
   const fetchData = async () => {
     setLoading(true);
 
-    // Fetch profiles to determine identity
+    try {
+      // Fetch profiles to determine identity
     const [infRes, brandRes] = await Promise.all([
       supabase.from("influencer_profiles").select("name, followers, rating, engagement_rate").eq("user_id", user!.id).maybeSingle(),
       supabase.from("brand_profiles").select("id").eq("user_id", user!.id).maybeSingle(),
@@ -141,7 +142,11 @@ const Dashboard = () => {
       setBookings(enriched);
     }
 
-    setLoading(false);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ---- Stats ----

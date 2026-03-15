@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, Search, MessageSquare, BarChart3, User } from "lucide-react";
+import { Home, Search, MessageSquare, BarChart3, User, Zap, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,12 +25,18 @@ const MobileNav = () => {
       .then(({ data }) => setInfluencerProfileId(data?.id ?? null));
   }, [user]);
 
-  const navItems = [
-    { label: "Home", icon: Home, path: "/" },
+  const navItems = user ? [
     { label: "Dashboard", icon: BarChart3, path: "/dashboard" },
     { label: "Messages", icon: MessageSquare, path: "/messages" },
-    { label: "Profile", icon: User, path: "/profile" },
+    { label: "Profile", icon: User, path: "/profile" }
+  ] : [
+    { label: "Discover", icon: Search, path: "#discover", isAnchor: true },
+    { label: "Features", icon: Zap, path: "#features", isAnchor: true },
+    { label: "How", icon: Home, path: "#how-it-works", isAnchor: true },
+    { label: "Reviews", icon: Star, path: "#testimonials", isAnchor: true }
   ];
+
+  if (navItems.length === 0) return null;
 
   return (
     <div className="fixed bottom-6 left-0 right-0 z-[25] flex justify-center px-4 md:hidden pb-[var(--safe-area-bottom)]">
@@ -43,15 +49,11 @@ const MobileNav = () => {
           const isProfileActive = item.label === "Profile" && location.pathname === "/dashboard";
           const active = isActive || isProfileActive;
 
-          return (
-            <Link
-              key={item.label + item.path}
-              to={item.path}
-              className={cn(
-                "relative flex flex-col items-center justify-center w-14 h-12 rounded-full transition-all duration-200",
-                active ? "bg-slate-100/50" : "hover:bg-slate-50 active:scale-95"
-              )}
-            >
+          const content = (
+            <div className={cn(
+              "relative flex flex-col items-center justify-center w-14 h-12 rounded-full transition-all duration-200",
+              active ? "bg-slate-100/50" : "hover:bg-slate-50 active:scale-95"
+            )}>
               <item.icon 
                 className={cn(
                   "h-5 w-5 mb-0.5 transition-colors duration-200", 
@@ -68,6 +70,28 @@ const MobileNav = () => {
               {active && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
               )}
+            </div>
+          );
+
+          if ((item as any).isAnchor) {
+            return (
+              <a
+                key={item.label + item.path}
+                href={item.path}
+                className="outline-none"
+              >
+                {content}
+              </a>
+            );
+          }
+
+          return (
+            <Link
+              key={item.label + item.path}
+              to={item.path}
+              className="outline-none"
+            >
+              {content}
             </Link>
           );
         })}

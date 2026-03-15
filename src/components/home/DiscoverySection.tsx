@@ -91,11 +91,11 @@ const DiscoverySection = ({
         filteredInfluencers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {filteredInfluencers.map((inf, i) => (
-              <InfluencerCard 
-                key={inf.id} 
-                influencer={inf} 
-                index={i} 
-                isOwn={inf.id === ownInfluencerId} 
+              <InfluencerCard
+                key={inf.id}
+                influencer={inf}
+                index={i}
+                isOwn={inf.id === ownInfluencerId}
               />
             ))}
           </div>
@@ -122,13 +122,13 @@ const DiscoverySection = ({
               <>
                 <h3 className="font-display font-semibold text-xl text-foreground">No influencers found</h3>
                 <p className="text-muted-foreground mt-2">Try adjusting your filters</p>
-                <Button 
-                  variant="outline" 
-                  className="mt-4" 
-                  onClick={() => { 
-                    setSearchQuery(""); 
-                    setSelectedCity("all"); 
-                    setSelectedNiche("all"); 
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedCity("all");
+                    setSelectedNiche("all");
                   }}
                 >
                   Clear Filters
@@ -176,13 +176,13 @@ const DiscoverySection = ({
             <>
               <h3 className="font-display font-semibold text-xl text-foreground">No campaigns found</h3>
               <p className="text-muted-foreground mt-2">Try adjusting your filters</p>
-              <Button 
-                variant="outline" 
-                className="mt-4" 
-                onClick={() => { 
-                  setSearchQuery(""); 
-                  setSelectedCity("all"); 
-                  setSelectedNiche("all"); 
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCity("all");
+                  setSelectedNiche("all");
                 }}
               >
                 Clear Filters

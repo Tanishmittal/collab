@@ -34,10 +34,14 @@ const Messages = () => {
   }, [user, authLoading]);
 
   const fetchConversations = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
-    // Get all messages involving this user
+    try {
+      // Get all messages involving this user
     const { data: messages } = await supabase
       .from("messages")
       .select("*")
@@ -90,8 +94,12 @@ const Messages = () => {
       });
     }
 
-    setConversations(convos);
-    setLoading(false);
+      setConversations(convos);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (authLoading || loading) {

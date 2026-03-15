@@ -32,7 +32,6 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
   };
 
   const desktopNavLinks = [
-    { label: "Home", path: "/", icon: Home },
     { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
     { label: "Messages", path: "/messages", icon: MessageSquare },
   ];
@@ -98,22 +97,53 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
           <div className="flex items-center gap-6">
             {/* Nav links */}
             <div className="flex items-center gap-1">
-              {desktopNavLinks.map((link) => {
-                const isActive = location.pathname === link.path;
-                return (
-                  <Link
-                    key={link.path}
-                    to={link.path}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                      }`}
+              {!user ? (
+                // Guest links (Home sections)
+                <>
+                  <a
+                    href="#discover"
+                    className="px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                   >
-                    <link.icon size={16} />
-                    {link.label}
-                  </Link>
-                );
-              })}
+                    Discover
+                  </a>
+                  <a
+                    href="#features"
+                    className="px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  >
+                    Features
+                  </a>
+                  <a
+                    href="#how-it-works"
+                    className="px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  >
+                    How it Works
+                  </a>
+                  <a
+                    href="#testimonials"
+                    className="px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  >
+                    Testimonials
+                  </a>
+                </>
+              ) : (
+                // Authenticated links
+                desktopNavLinks.map((link) => {
+                  const isActive = location.pathname === link.path;
+                  return (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive
+                        ? "bg-primary/10 text-primary"
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        }`}
+                    >
+                      <link.icon size={16} />
+                      {link.label}
+                    </Link>
+                  );
+                })
+              )}
             </div>
 
             {/* Action buttons + avatar */}

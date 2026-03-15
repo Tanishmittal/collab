@@ -57,7 +57,7 @@ const item = {
 };
 
 const FeaturesSection = () => (
-  <section className="py-24 bg-gray-50/60">
+  <section id="features" className="py-24 bg-gray-50/60">
     <div className="container">
       <motion.div
         initial={{ opacity: 0, y: 20 }}

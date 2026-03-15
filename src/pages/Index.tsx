@@ -28,7 +28,8 @@ const stats = [
 ];
 
 const Index = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
+  console.log("[Index] render:", { authLoading, user: user?.id });
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("all");
@@ -51,11 +52,23 @@ const Index = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Don't start data fetching until auth state is known
-      if (authLoading) return;
+      console.log("[Index] fetchData triggered. authLoading:", authLoading, "user:", user?.id);
       
-      setDataLoading(true);
+      // Don't start data fetching until auth state is known
+      if (authLoading) {
+        console.log("[Index] authLoading is true, skipping fetch...");
+        setDataLoading(true);
+        return;
+      }
+      
+      // Safety timeout specifically for data fetching
+      const dataTimeout = setTimeout(() => {
+        console.warn("[Index] Data fetching safety timeout hit (8s)!");
+        setDataLoading(false);
+      }, 8000);
+      
       try {
+        console.log("[Index] Fetching data...");
         const [infRes, campRes, brandRes] = await Promise.all([
           supabase.from("influencer_profiles").select("*"),
           supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
@@ -100,21 +113,25 @@ const Index = () => {
           })));
         }
 
-        if (user) {
-          const ownInf = infRes.data?.find((r) => r.user_id === user.id);
-          const ownBrand = brandRes.data?.find((r) => r.user_id === user.id);
+        if (user && infRes.data && brandRes.data) {
+          const ownInf = infRes.data.find((r) => r.user_id === user.id);
+          const ownBrand = brandRes.data.find((r) => r.user_id === user.id);
           setOwnInfluencerId(ownInf?.id ?? null);
           setOwnBrandId(ownBrand?.id ?? null);
         } else {
           setOwnInfluencerId(null);
           setOwnBrandId(null);
         }
+        
+        console.log("[Index] Data fetch complete.");
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("[Index] Fetch error:", error);
       } finally {
+        clearTimeout(dataTimeout);
         setDataLoading(false);
       }
     };
+
     fetchData();
   }, [user, authLoading]);
 

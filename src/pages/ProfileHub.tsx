@@ -35,7 +35,10 @@ const ProfileHub = () => {
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       
       try {
         const [influencerRes, brandRes] = await Promise.all([

@@ -34,7 +34,7 @@ const AnimatedNumber = ({ value, suffix = "", prefix = "", isDecimal = false }: 
 };
 
 const StatsSection = () => (
-  <section className="py-20 bg-gray-900 relative overflow-hidden">
+  <section id="stats" className="py-20 bg-gray-900 relative overflow-hidden">
     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,184,166,0.08),transparent_70%)]" />
     <div className="container relative z-10">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
