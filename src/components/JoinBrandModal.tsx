@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   Building2, MapPin, Target, CheckCircle, ArrowLeft, ArrowRight, 
   Sparkles, Globe, Phone, Mail, IndianRupee, Users, 
-  ShieldCheck, Briefcase, Rocket, Info, Laptop, Plus
+  ShieldCheck, Briefcase, Rocket, Info, Laptop, Plus, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,7 @@ interface JoinBrandModalProps {
 const JoinBrandModal = ({ trigger }: JoinBrandModalProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshProfiles } = useAuth();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -132,6 +132,10 @@ const JoinBrandModal = ({ trigger }: JoinBrandModalProps) => {
         user_type: "brand", 
         display_name: form.businessName 
       }).eq("user_id", user.id);
+    }
+    
+    if (!error) {
+      await refreshProfiles();
     }
 
     setSubmitting(false);

@@ -8,22 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 const MobileNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [influencerProfileId, setInfluencerProfileId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user) {
-      setInfluencerProfileId(null);
-      return;
-    }
-
-    supabase
-      .from("influencer_profiles")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }) => setInfluencerProfileId(data?.id ?? null));
-  }, [user]);
+  const { user, influencerId } = useAuth();
 
   const navItems = user ? [
     { label: "Dashboard", icon: BarChart3, path: "/dashboard" },

@@ -33,7 +33,7 @@ const Auth = () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin + "/onboarding-check",
+        redirectTo: `${window.location.origin}/onboarding-check`,
       },
     });
     
@@ -67,7 +67,7 @@ const Auth = () => {
       password: signupPassword,
       options: {
         data: { display_name: signupName },
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: `${window.location.origin}/onboarding-check`,
       },
     });
     setLoading(false);

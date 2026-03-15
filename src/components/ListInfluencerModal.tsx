@@ -213,9 +213,12 @@ const ListInfluencerModal = ({ trigger, onCreated }: ListInfluencerModalProps) =
 
     setSubmitting(false);
 
+    const { refreshProfiles } = useAuth();
+    
     if (error) {
       toast({ title: "Error creating profile", description: error.message, variant: "destructive" });
     } else {
+      await refreshProfiles();
       toast({ title: "🚀 Profile Created!", description: "Welcome to InfluFlow! Your profile is now live." });
       resetForm();
       setOpen(false);

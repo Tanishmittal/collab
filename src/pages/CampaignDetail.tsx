@@ -57,7 +57,7 @@ interface ApplicationRow {
 
 const CampaignDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, influencerId } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -69,7 +69,6 @@ const CampaignDetail = () => {
   const [submitting, setSubmitting] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [myApplication, setMyApplication] = useState<{ id: string; status: string } | null>(null);
-  const [influencerProfileId, setInfluencerProfileId] = useState<string | null>(null);
 
   const isOwner = user && campaign && campaign.user_id === user.id;
 
@@ -78,7 +77,6 @@ const CampaignDetail = () => {
       fetchCampaign();
       if (user) {
         checkExistingApplication();
-        fetchInfluencerProfile();
       }
     }
   }, [id, user]);
@@ -110,16 +108,6 @@ const CampaignDetail = () => {
     setMyApplication(data ? { id: data.id, status: data.status } : null);
   };
 
-  const fetchInfluencerProfile = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("influencer_profiles")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    setInfluencerProfileId(data?.id || null);
-  };
-
   const fetchApplications = async () => {
     const { data } = await supabase
       .from("campaign_applications")
@@ -135,16 +123,16 @@ const CampaignDetail = () => {
       navigate("/auth");
       return;
     }
-    if (!influencerProfileId) {
+    if (!influencerId) {
       toast({ title: "No influencer profile", description: "Please register as an influencer first.", variant: "destructive" });
-      navigate("/register");
+      navigate("/profile");
       return;
     }
 
     setSubmitting(true);
     const { error } = await supabase.from("campaign_applications").insert({
       campaign_id: id!,
-      influencer_profile_id: influencerProfileId,
+      influencer_profile_id: influencerId,
       user_id: user.id,
       message: applyMessage.trim().slice(0, 500),
     });

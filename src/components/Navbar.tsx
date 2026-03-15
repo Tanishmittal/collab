@@ -24,7 +24,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const isAuthPage = location.pathname === "/auth";
-  const { user, loading, influencerProfileId, brandProfileId, signOut } = useAuth();
+  const { user, loading, influencerId, brandId, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -152,7 +152,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
                 <>
                   {!loading && (
                     <>
-                      {brandProfileId ? (
+                      {brandId ? (
                         <CreateCampaignModal
                           trigger={
                             <Button size="sm" className="gradient-primary border-0 text-primary-foreground rounded-xl h-9 px-4 font-semibold text-xs gap-2">
@@ -169,7 +169,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
                           }
                         />
                       )}
-                      {!influencerProfileId && (
+                      {!influencerId && (
                         <ListInfluencerModal
                           trigger={
                             <Button variant="outline" size="sm" className="rounded-xl h-9 px-4 font-semibold text-xs gap-2">
@@ -192,9 +192,9 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-52 p-1.5 rounded-xl">
-                      {influencerProfileId && (
+                      {influencerId && (
                         <DropdownMenuItem asChild>
-                          <Link to={`/influencer/${influencerProfileId}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
+                          <Link to={`/influencer/${influencerId}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
                             <UserCircle className="w-4 h-4 text-primary" />
                             <span className="text-sm font-medium">My Profile</span>
                           </Link>

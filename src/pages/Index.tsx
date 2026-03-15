@@ -28,7 +28,7 @@ const stats = [
 ];
 
 const Index = () => {
-  const { user, session, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading, influencerId: ownInfluencerId, brandId: ownBrandId } = useAuth();
   console.log("[Index] render:", { authLoading, user: user?.id });
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,8 +40,6 @@ const Index = () => {
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [ownInfluencerId, setOwnInfluencerId] = useState<string | null>(null);
-  const [ownBrandId, setOwnBrandId] = useState<string | null>(null);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -113,15 +111,7 @@ const Index = () => {
           })));
         }
 
-        if (user && infRes.data && brandRes.data) {
-          const ownInf = infRes.data.find((r) => r.user_id === user.id);
-          const ownBrand = brandRes.data.find((r) => r.user_id === user.id);
-          setOwnInfluencerId(ownInf?.id ?? null);
-          setOwnBrandId(ownBrand?.id ?? null);
-        } else {
-          setOwnInfluencerId(null);
-          setOwnBrandId(null);
-        }
+        // Local state for ownInfluencerId and ownBrandId removed in favor of AuthContext
         
         console.log("[Index] Data fetch complete.");
       } catch (error) {

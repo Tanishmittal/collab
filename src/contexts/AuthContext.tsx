@@ -9,6 +9,7 @@ interface AuthContextType {
   influencerId: string | null;
   brandId: string | null;
   signOut: () => Promise<void>;
+  refreshProfiles: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType>({
   influencerId: null,
   brandId: null,
   signOut: async () => {},
+  refreshProfiles: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -172,8 +174,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setBrandId(null);
   };
 
+  const refreshProfiles = async () => {
+    if (user) {
+      await fetchProfiles(user.id);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, loading, influencerId, brandId, signOut }}>
+    <AuthContext.Provider value={{ session, user, loading, influencerId, brandId, signOut, refreshProfiles }}>
       {children}
     </AuthContext.Provider>
   );
