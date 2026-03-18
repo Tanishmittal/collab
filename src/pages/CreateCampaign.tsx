@@ -1,20 +1,14 @@
 import { useState } from "react";
-import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
   Building2,
-  Calendar as CalendarIcon,
   CheckCircle,
   Clock,
-  IndianRupee,
-  Layers,
   Loader2,
   MapPin,
   Megaphone,
-  Minus,
-  Plus,
   Target,
   Users,
   Zap,
@@ -22,20 +16,18 @@ import {
 import Navbar from "@/components/Navbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
-import { CITIES, NICHES } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useCampaignForm } from "@/hooks/useCampaignForm";
+import CampaignForm from "@/components/CampaignForm";
 import { cn } from "@/lib/utils";
 
-const logoOptions = ["B", "C", "F", "M", "S", "T"];
-const deliverableOptions = ["Reel", "Story", "Post", "UGC Video"] as const;
+const steps = [
+  { icon: Megaphone, label: "Identity" },
+  { icon: Target, label: "Strategy" },
+  { icon: Layers, label: "Logistics" },
+];
+
 const nicheColors: Record<string, string> = {
   Food: "text-orange-600 border-orange-200 bg-orange-50",
   Fitness: "text-green-600 border-green-200 bg-green-50",
@@ -47,60 +39,28 @@ const nicheColors: Record<string, string> = {
   Comedy: "text-yellow-600 border-yellow-200 bg-yellow-50",
 };
 
-const steps = [
-  { icon: Megaphone, label: "Identity" },
-  { icon: Target, label: "Strategy" },
-  { icon: Layers, label: "Logistics" },
-];
-
 const CreateCampaign = () => {
   const navigate = useNavigate();
-  const { user, brandId } = useAuth();
+  const { brandId } = useAuth();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    brand: "",
-    brandLogo: "B",
-    city: "",
-    niche: "",
-    budget: "",
-    influencersNeeded: "",
-    description: "",
-    deadline: undefined as Date | undefined,
-  });
-  const [deliverableCounts, setDeliverableCounts] = useState<Record<(typeof deliverableOptions)[number], number>>({
-    Reel: 0,
-    Story: 0,
-    Post: 0,
-    "UGC Video": 0,
-  });
-  const [includeEventVisit, setIncludeEventVisit] = useState(false);
 
-  const update = (field: keyof typeof form, value: string | Date | undefined) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  };
+  const {
+    submitting,
+    form,
+    update,
+    deliverableCounts,
+    updateDeliverable,
+    includeEventVisit,
+    setIncludeEventVisit,
+    campaignDeliverables,
+    canProceed,
+    handleCreate,
+    logoOptions,
+    deliverableOptions,
+  } = useCampaignForm(() => navigate("/dashboard"));
 
-  const canProceed = () => {
-    if (step === 0) return Boolean(form.brand && form.city && form.niche);
-    if (step === 1) return Boolean(form.description && form.budget && form.influencersNeeded);
-    return Object.values(deliverableCounts).some((count) => count > 0) || includeEventVisit;
-  };
-
-  const campaignDeliverables = [
-    ...deliverableOptions
-      .filter((label) => deliverableCounts[label] > 0)
-      .map((label) => `${deliverableCounts[label]} ${label}${deliverableCounts[label] > 1 ? "s" : ""}`),
-    ...(includeEventVisit ? ["Event Visit"] : []),
-  ];
-
-  const updateDeliverable = (label: (typeof deliverableOptions)[number], delta: number) => {
-    setDeliverableCounts((prev) => ({
-      ...prev,
-      [label]: Math.max(0, prev[label] + delta),
-    }));
-  };
-
+  // Preview calculations
   const previewBudget = form.budget ? parseInt(form.budget, 10) : 0;
   const previewSlots = form.influencersNeeded ? parseInt(form.influencersNeeded, 10) : 0;
   const previewApplied = previewSlots > 0 ? Math.max(1, Math.min(previewSlots - 1, Math.floor(previewSlots * 0.6))) : 0;
@@ -108,40 +68,6 @@ const CreateCampaign = () => {
   const previewSlotsLeft = Math.max(0, previewSlots - previewApplied);
   const previewIsUrgent = previewProgress >= 80 && previewSlotsLeft > 0;
   const previewNicheStyle = nicheColors[form.niche] || "text-teal-600 border-teal-200 bg-teal-50";
-
-  const handleCreate = async () => {
-    if (!user) {
-      toast({ title: "Sign in required", description: "Please sign in to create a campaign.", variant: "destructive" });
-      navigate("/auth");
-      return;
-    }
-
-    setSubmitting(true);
-    const { error } = await supabase.from("campaigns").insert({
-      user_id: user.id,
-      brand: form.brand.trim().slice(0, 100),
-      brand_logo: form.brandLogo,
-      city: form.city,
-      niche: form.niche,
-      budget: parseInt(form.budget, 10),
-      influencers_needed: parseInt(form.influencersNeeded, 10),
-      deliverables: campaignDeliverables,
-      description: form.description.trim().slice(0, 1000),
-      expires_at: form.deadline?.toISOString(),
-      status: "active",
-    });
-
-    setSubmitting(false);
-
-    if (error) {
-      console.error("Campaign creation error:", error);
-      toast({ title: "Error", description: "Failed to create campaign. Please try again.", variant: "destructive" });
-      return;
-    }
-
-    toast({ title: "Campaign live", description: "Your campaign is now visible to influencers." });
-    navigate("/dashboard");
-  };
 
   if (!brandId) {
     return (
@@ -210,215 +136,19 @@ const CreateCampaign = () => {
               </div>
             </div>
 
-            <div className="space-y-6">
-              {step === 0 && (
-                <div className="space-y-6">
-                  <div className="grid gap-4 md:grid-cols-[1fr_88px]">
-                    <div className="space-y-2">
-                      <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Brand Name *</Label>
-                      <Input
-                        placeholder="e.g. Burger Cafe"
-                        className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-lg font-bold shadow-none"
-                        value={form.brand}
-                        onChange={(e) => update("brand", e.target.value)}
-                        maxLength={100}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="block text-center text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Mark</Label>
-                      <Select value={form.brandLogo} onValueChange={(value) => update("brandLogo", value)}>
-                        <SelectTrigger className="h-14 rounded-2xl border-slate-200 bg-slate-50 text-xl font-bold shadow-none">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-2xl border-slate-200">
-                          {logoOptions.map((option) => (
-                            <SelectItem key={option} value={option} className="font-bold">
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Primary City *</Label>
-                      <Select value={form.city} onValueChange={(value) => update("city", value)}>
-                        <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-5 font-bold shadow-none">
-                          <SelectValue placeholder="Select location" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-2xl border-slate-200">
-                          {CITIES.map((city) => (
-                            <SelectItem key={city} value={city} className="font-bold">
-                              {city}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Core Niche *</Label>
-                      <Select value={form.niche} onValueChange={(value) => update("niche", value)}>
-                        <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-5 font-bold shadow-none">
-                          <SelectValue placeholder="Select niche" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-2xl border-slate-200">
-                          {NICHES.map((niche) => (
-                            <SelectItem key={niche} value={niche} className="font-bold">
-                              {niche}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {step === 1 && (
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Brief Description *</Label>
-                    <Textarea
-                      placeholder="Describe the campaign goals, audience, and what kind of creators you want."
-                      className="min-h-[180px] rounded-2xl border-slate-200 bg-slate-50 p-5 text-sm leading-relaxed shadow-none"
-                      value={form.description}
-                      onChange={(e) => update("description", e.target.value)}
-                      maxLength={1000}
-                    />
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Budget (Rs.) *</Label>
-                      <div className="relative">
-                        <IndianRupee className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <Input
-                          type="number"
-                          placeholder="e.g. 25000"
-                          className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-bold shadow-none"
-                          value={form.budget}
-                          onChange={(e) => update("budget", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Creators Needed *</Label>
-                      <div className="relative">
-                        <Users className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <Input
-                          type="number"
-                          placeholder="e.g. 10"
-                          className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-bold shadow-none"
-                          value={form.influencersNeeded}
-                          onChange={(e) => update("influencersNeeded", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {step === 2 && (
-                <div className="space-y-8">
-                  <div className="space-y-2">
-                    <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Requested Deliverables</Label>
-                    <div className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                      {deliverableOptions.map((label) => (
-                        <div key={label} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{label}</p>
-                            <p className="text-xs text-slate-400">Adjust how many of this deliverable you want.</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-9 w-9 rounded-xl border-slate-200"
-                              onClick={() => updateDeliverable(label, -1)}
-                              disabled={deliverableCounts[label] === 0}
-                            >
-                              <Minus size={16} />
-                            </Button>
-                            <div className="w-10 text-center text-base font-bold text-slate-900">{deliverableCounts[label]}</div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-9 w-9 rounded-xl border-slate-200"
-                              onClick={() => updateDeliverable(label, 1)}
-                            >
-                              <Plus size={16} />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-
-                      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">Event Visit</p>
-                          <p className="text-xs text-slate-400">Turn this on if the creator needs to appear in person.</p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={cn(
-                            "rounded-xl border-slate-200 px-4 font-semibold",
-                            includeEventVisit && "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
-                          )}
-                          onClick={() => setIncludeEventVisit((current) => !current)}
-                        >
-                          {includeEventVisit ? "Included" : "Add"}
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="ml-1 text-[10px] font-medium italic text-slate-400">Select at least one deliverable to continue.</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Application Deadline</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "h-14 w-full justify-start rounded-2xl border-slate-200 bg-slate-50 px-5 text-left font-bold shadow-none hover:bg-slate-100",
-                            !form.deadline && "text-slate-400"
-                          )}
-                        >
-                          <CalendarIcon className="mr-3 h-5 w-5 text-teal-600/80" />
-                          {form.deadline ? format(form.deadline, "PPP") : <span>Set closing date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto rounded-2xl border-slate-200 p-0 shadow-xl" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={form.deadline}
-                          onSelect={(date) => update("deadline", date)}
-                          initialFocus
-                          disabled={(date) => date < new Date()}
-                          className="rounded-2xl"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div className="flex items-start gap-4 rounded-3xl border border-teal-100 bg-teal-50 p-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm">
-                      <CheckCircle className="h-5 w-5 text-teal-600" />
-                    </div>
-                    <div>
-                      <p className="mb-0.5 text-xs font-bold uppercase tracking-wide text-teal-700">Final Check</p>
-                      <p className="text-[11px] font-medium leading-relaxed text-teal-700/80">
-                        Double check the budget, slots, and deliverables. Influencers will apply based on these terms.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <CampaignForm
+              step={step}
+              isEdit={false}
+              form={form}
+              update={update}
+              deliverableCounts={deliverableCounts}
+              updateDeliverable={updateDeliverable}
+              includeEventVisit={includeEventVisit}
+              setIncludeEventVisit={setIncludeEventVisit}
+              campaignDeliverables={campaignDeliverables}
+              logoOptions={logoOptions}
+              deliverableOptions={deliverableOptions}
+            />
 
             <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
               <Button
@@ -433,7 +163,7 @@ const CreateCampaign = () => {
               {step < 2 ? (
                 <Button
                   onClick={() => setStep((current) => current + 1)}
-                  disabled={!canProceed()}
+                  disabled={!canProceed(step)}
                   className="h-12 w-full rounded-2xl bg-slate-900 px-10 font-bold text-white hover:bg-slate-800 sm:w-auto"
                 >
                   Continue
@@ -442,7 +172,7 @@ const CreateCampaign = () => {
               ) : (
                 <Button
                   onClick={handleCreate}
-                  disabled={submitting || !canProceed()}
+                  disabled={submitting || !canProceed(step)}
                   className="h-12 w-full rounded-2xl bg-teal-600 px-10 font-bold text-white hover:bg-teal-700 sm:w-auto"
                 >
                   {submitting ? (
@@ -508,7 +238,7 @@ const CreateCampaign = () => {
                       <div className="text-right">
                         <div className="flex items-center justify-end gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-600 shadow-sm">
                           <Clock size={12} className={previewIsUrgent ? "text-rose-500" : "text-teal-600"} />
-                          {form.deadline ? format(form.deadline, "dd MMM") : "TBD"}
+                          {form.deadline ? "Deadline set" : "TBD"}
                         </div>
                       </div>
                     </div>

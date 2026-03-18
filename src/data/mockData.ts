@@ -19,6 +19,7 @@ export interface Influencer {
 
 export interface Campaign {
   id: string;
+  userId?: string;
   brand: string;
   brandLogo: string;
   city: string;

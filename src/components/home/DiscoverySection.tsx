@@ -207,7 +207,7 @@ const DiscoverySection = ({
         ) : filteredCampaigns.length > 0 ? (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             {filteredCampaigns.map((c, i) => (
-              <CampaignCard key={c.id} campaign={c} index={i} />
+              <CampaignCard key={c.id} campaign={c} index={i} isOwn={c.userId === user?.id} />
             ))}
           </div>
         ) : (

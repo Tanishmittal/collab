@@ -15,7 +15,7 @@ const nicheColors: Record<string, string> = {
   Comedy: "text-yellow-600 border-yellow-200 bg-yellow-50",
 };
 
-const CampaignCard = ({ campaign, index = 0 }: { campaign: Campaign; index?: number }) => {
+const CampaignCard = ({ campaign, index = 0, isOwn = false }: { campaign: Campaign; index?: number; isOwn?: boolean }) => {
   const navigate = useNavigate();
   const progress = Math.min((campaign.influencersApplied / campaign.influencersNeeded) * 100, 100);
   const slotsLeft = Math.max(0, campaign.influencersNeeded - campaign.influencersApplied);
@@ -142,19 +142,28 @@ const CampaignCard = ({ campaign, index = 0 }: { campaign: Campaign; index?: num
             />
           </div>
 
-          <button
-            className="w-full py-3 bg-gray-900 hover:bg-teal-600 text-white rounded-xl font-bold tracking-wide transition-colors duration-300 shadow flex items-center justify-center gap-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/campaign/${campaign.id}`);
-            }}
-          >
-            Apply Now
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3.33331 8H12.6666" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M8 3.33331L12.6667 7.99998L8 12.6666" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          {isOwn ? (
+            <button
+              className="w-full py-3 bg-gray-400 text-white rounded-xl font-bold tracking-wide shadow flex items-center justify-center gap-2 cursor-not-allowed"
+              disabled
+            >
+              Your Campaign
+            </button>
+          ) : (
+            <button
+              className="w-full py-3 bg-gray-900 hover:bg-teal-600 text-white rounded-xl font-bold tracking-wide transition-colors duration-300 shadow flex items-center justify-center gap-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/campaign/${campaign.id}`);
+              }}
+            >
+              Apply Now
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3.33331 8H12.6666" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M8 3.33331L12.6667 7.99998L8 12.6666" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

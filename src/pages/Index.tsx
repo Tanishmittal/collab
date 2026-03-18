@@ -82,6 +82,7 @@ const Index = () => {
         (row) =>
           ({
             id: row.id,
+            userId: row.user_id,
             brand: row.brand,
             brandLogo: row.brand_logo || "B",
             city: row.city,
