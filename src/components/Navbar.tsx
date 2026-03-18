@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import CreateCampaignModal from "@/components/CreateCampaignModal";
 import ListInfluencerModal from "@/components/ListInfluencerModal";
 import JoinBrandModal from "@/components/JoinBrandModal"; // Added this import
 
@@ -154,13 +153,9 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
                   {!loading && (
                     <>
                       {brandId ? (
-                        <CreateCampaignModal
-                          trigger={
-                            <Button size="sm" className="gradient-primary border-0 text-primary-foreground rounded-xl h-9 px-4 font-semibold text-xs gap-2">
-                              <Building2 className="w-4 h-4" /> New Campaign
-                            </Button>
-                          }
-                        />
+                        <Button size="sm" className="gradient-primary border-0 text-primary-foreground rounded-xl h-9 px-4 font-semibold text-xs gap-2" onClick={() => navigate("/create-campaign")}>
+                          <Building2 className="w-4 h-4" /> New Campaign
+                        </Button>
                       ) : (
                         <JoinBrandModal
                           trigger={

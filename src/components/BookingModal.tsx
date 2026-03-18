@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, IndianRupee, Minus, Plus, ShoppingCart } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 interface BookingModalProps {
   influencer: any; // Using any for flexibility with snake_case/camelCase
   influencerUserId?: string;
+  campaignId?: string;
+  applicationId?: string;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -24,7 +26,7 @@ interface BookingItem {
   qty: number;
 }
 
-const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: BookingModalProps) => {
+const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId, isOpen, onClose }: BookingModalProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<BookingItem[]>([
@@ -35,6 +37,35 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
   const [notes, setNotes] = useState("");
   const [step, setStep] = useState<"select" | "confirm" | "done">("select");
   const [submitting, setSubmitting] = useState(false);
+  const [existingBookingStatus, setExistingBookingStatus] = useState<string | null>(null);
+
+  const bookingLocked = !!applicationId && existingBookingStatus !== null;
+
+  const checkExistingBooking = async () => {
+    if (!applicationId || !isOpen) {
+      setExistingBookingStatus(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("bookings" as any)
+      .select("status")
+      .eq("application_id", applicationId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data?.status) {
+      setExistingBookingStatus(data.status);
+      return;
+    }
+
+    setExistingBookingStatus(null);
+  };
+
+  useEffect(() => {
+    checkExistingBooking();
+  }, [applicationId, isOpen]);
 
   const updateQty = (index: number, delta: number) => {
     setItems(prev => prev.map((item, i) =>
@@ -51,9 +82,20 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
       return;
     }
 
+    if (bookingLocked) {
+      toast({
+        title: "Booking already exists",
+        description: `This accepted application already has a ${existingBookingStatus} booking.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
     const { error } = await supabase.from("bookings" as any).insert({
+      application_id: applicationId ?? null,
       brand_user_id: user.id,
+      campaign_id: campaignId ?? null,
       influencer_user_id: influencerUserId,
       influencer_profile_id: influencer.id,
       items: selectedItems.map(i => ({ type: i.type, price: i.price, qty: i.qty })),
@@ -78,6 +120,7 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
       setStep("select");
       setItems(prev => prev.map(i => ({ ...i, qty: 0 })));
       setNotes("");
+      setExistingBookingStatus(null);
     }, 300);
   };
 
@@ -101,11 +144,17 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
                 </div>
                 <div>
                   <div className="font-semibold text-sm text-foreground">{influencer.name}</div>
-                  <div className="text-xs text-muted-foreground">{influencer.city} · {influencer.niche}</div>
+                  <div className="text-xs text-muted-foreground">{influencer.city} • {influencer.niche}</div>
                 </div>
               </div>
 
               <div className="space-y-2">
+                {bookingLocked && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    A booking already exists for this accepted application.
+                    <span className="ml-1 font-semibold">Current status: {existingBookingStatus}</span>
+                  </div>
+                )}
                 {items.map((item, i) => (
                   <div key={item.type} className="flex items-center justify-between p-3 rounded-lg border bg-card">
                     <div>
@@ -115,11 +164,11 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(i, -1)} disabled={item.qty === 0}>
+                      <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(i, -1)} disabled={bookingLocked || item.qty === 0}>
                         <Minus size={14} />
                       </Button>
                       <span className="w-6 text-center text-sm font-semibold text-foreground">{item.qty}</span>
-                      <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(i, 1)}>
+                      <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(i, 1)} disabled={bookingLocked}>
                         <Plus size={14} />
                       </Button>
                     </div>
@@ -127,7 +176,7 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
                 ))}
               </div>
 
-              <div><Label className="text-xs">Notes for the influencer</Label><Textarea placeholder="Any specific requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="mt-1 text-sm" rows={2} maxLength={500} /></div>
+              <div><Label className="text-xs">Notes for the influencer</Label><Textarea placeholder="Any specific requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="mt-1 text-sm" rows={2} maxLength={500} disabled={bookingLocked} /></div>
 
               <Separator />
 
@@ -136,7 +185,7 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
                 <span className="font-display font-bold text-xl text-foreground flex items-center"><IndianRupee size={16} />{(total || 0).toLocaleString()}</span>
               </div>
 
-              <Button className="w-full gradient-primary border-0 text-primary-foreground" disabled={total === 0} onClick={() => setStep("confirm")}>
+              <Button className="w-full gradient-primary border-0 text-primary-foreground" disabled={bookingLocked || total === 0} onClick={() => setStep("confirm")}>
                 <ShoppingCart size={16} className="mr-2" /> Proceed to Book
               </Button>
             </motion.div>
@@ -148,13 +197,13 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
                 {selectedItems.map(item => (
                   <div key={item.type} className="flex justify-between text-sm">
                     <span className="text-foreground">{item.qty}x {item.type}</span>
-                    <span className="font-semibold text-foreground">₹{(item.price * item.qty || 0).toLocaleString()}</span>
+                    <span className="font-semibold text-foreground">Rs. {(item.price * item.qty || 0).toLocaleString()}</span>
                   </div>
                 ))}
                 <Separator />
                 <div className="flex justify-between font-display font-bold">
                   <span className="text-foreground">Total</span>
-                  <span className="text-foreground">₹{(total || 0).toLocaleString()}</span>
+                  <span className="text-foreground">Rs. {(total || 0).toLocaleString()}</span>
                 </div>
               </div>
               {notes && <div className="p-3 rounded-lg border text-sm text-muted-foreground"><span className="font-medium text-foreground">Notes:</span> {notes}</div>}
@@ -179,7 +228,7 @@ const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: Booking
               </div>
               <div className="p-3 rounded-lg bg-muted/50 text-sm">
                 <span className="text-muted-foreground">Amount in escrow: </span>
-                <span className="font-semibold text-foreground">₹{(total || 0).toLocaleString()}</span>
+                <span className="font-semibold text-foreground">Rs. {(total || 0).toLocaleString()}</span>
               </div>
               <Button className="w-full" variant="outline" onClick={handleClose}>Done</Button>
             </motion.div>

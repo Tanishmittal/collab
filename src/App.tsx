@@ -1,9 +1,11 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
@@ -12,6 +14,9 @@ import UnifiedProfile from "./pages/UnifiedProfile";
 import RegisterInfluencer from "./pages/RegisterInfluencer";
 import RegisterBrand from "./pages/RegisterBrand";
 import EditInfluencerProfile from "./pages/EditInfluencerProfile";
+import EditBrandProfile from "./pages/EditBrandProfile";
+import CreateCampaign from "./pages/CreateCampaign";
+import EditCampaign from "./pages/EditCampaign";
 import CampaignDetail from "./pages/CampaignDetail";
 import Messages from "./pages/Messages";
 import Auth from "./pages/Auth";
@@ -21,8 +26,6 @@ import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import MobileNav from "@/components/MobileNav";
 import { usePushNotifications } from "./hooks/usePushNotifications";
-
-const queryClient = new QueryClient();
 
 const HomeWrapper = () => {
   const { user, loading } = useAuth();
@@ -63,6 +66,9 @@ const AppRoutes = () => {
       <Route element={<ProtectedRoute variant="layout"><DashboardLayout><Outlet /></DashboardLayout></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/edit-profile" element={<EditInfluencerProfile />} />
+        <Route path="/edit-brand-profile" element={<EditBrandProfile />} />
+        <Route path="/create-campaign" element={<CreateCampaign />} />
+        <Route path="/edit-campaign/:id" element={<EditCampaign />} />
         <Route path="/messages" element={<Messages />} />
         <Route path="/register" element={<RegisterInfluencer />} />
         <Route path="/register-brand" element={<RegisterBrand />} />
@@ -76,18 +82,20 @@ const AppRoutes = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-          <MobileNav />
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppRoutes />
+            <MobileNav />
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

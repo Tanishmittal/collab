@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
 import { Save, Instagram, Youtube, Twitter, Loader2, ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import AvatarUpload from "@/components/AvatarUpload";
@@ -163,34 +162,31 @@ const EditInfluencerProfile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar variant="minimal" title="Edit Profile" />
+      <div className="min-h-screen bg-background">
+        <Navbar variant="minimal" title="Edit Profile" />
 
-      <div className="gradient-hero py-10">
-        <div className="container max-w-2xl">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <Button variant="ghost" size="sm" className="text-primary-foreground/70 hover:text-primary-foreground mb-4" onClick={() => navigate(-1)}>
-              <ArrowLeft size={16} className="mr-1" /> Back
-            </Button>
-            <div className="flex items-center gap-5">
-              {user && (
-                <AvatarUpload
-                  userId={user.id}
-                  currentUrl={avatarUrl}
-                  initials={name.split(" ").map(n => n[0]).join("")}
-                  onUploaded={(url) => setAvatarUrl(url)}
-                />
-              )}
-              <div>
-                <h1 className="text-3xl font-display font-bold text-primary-foreground">Edit Your Profile</h1>
-                <p className="text-primary-foreground/60 mt-1">Tap the photo to change it</p>
-              </div>
+      <div className="container max-w-5xl py-6 pb-16 space-y-4">
+        <Button variant="ghost" size="sm" className="mb-1 px-0 text-muted-foreground hover:text-foreground" onClick={() => navigate(-1)}>
+          <ArrowLeft size={16} className="mr-1" /> Back
+        </Button>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-4">
+            {user && (
+              <AvatarUpload
+                userId={user.id}
+                currentUrl={avatarUrl}
+                initials={name.split(" ").map(n => n[0]).join("")}
+                onUploaded={(url) => setAvatarUrl(url)}
+              />
+            )}
+            <div>
+              <h1 className="font-display text-2xl font-bold text-foreground">Edit Influencer Profile</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Update your public profile and pricing.</p>
             </div>
-          </motion.div>
+          </div>
         </div>
-      </div>
 
-      <div className="container max-w-2xl -mt-6 pb-16 relative z-10 space-y-5">
         {/* Personal Info */}
         <Card className="glass-card">
           <CardHeader className="pb-2">

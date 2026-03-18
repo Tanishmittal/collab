@@ -7,7 +7,6 @@ import SearchFilters from "@/components/SearchFilters";
 import InfluencerCard from "@/components/InfluencerCard";
 import CampaignCard from "@/components/CampaignCard";
 import ListInfluencerModal from "@/components/ListInfluencerModal";
-import CreateCampaignModal from "@/components/CreateCampaignModal";
 import JoinBrandModal from "@/components/JoinBrandModal";
 import type { Influencer, Campaign } from "@/data/mockData";
 import { useNavigate } from "react-router-dom";
@@ -101,13 +100,9 @@ const EmptyCampaignState = ({
           Be the first brand to post a campaign and connect with local influencers.
         </p>
         {ownBrandId ? (
-          <CreateCampaignModal
-            trigger={
-              <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
-                <Plus size={16} className="mr-2" /> Post a Campaign
-              </Button>
-            }
-          />
+          <Button className="mt-6 gradient-primary border-0 text-primary-foreground" onClick={() => navigate("/create-campaign")}>
+            <Plus size={16} className="mr-2" /> Post a Campaign
+          </Button>
         ) : (
           <JoinBrandModal
             trigger={
@@ -153,10 +148,9 @@ const DiscoverySection = ({
 }: DiscoverySectionProps) => {
   const { user } = useAuth();
 
-  // Optimized sticky classes for both Guest and Dashboard contexts
-  const stickyClasses = user
-    ? "sticky top-0 md:top-0 lg:top-0 z-30 bg-white/95 backdrop-blur-sm -mx-4 py-4 px-4 sm:mx-0 sm:px-0"
-    : "sticky top-14 md:top-16 lg:top-20 z-30 bg-white/95 backdrop-blur-sm py-4 -mx-4 px-4 sm:mx-0 sm:px-0";
+  const filterWrapperClasses = user
+    ? "sticky top-0 z-30 -mx-4 border-b border-slate-200/70 bg-white/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:px-0 sm:py-4"
+    : "py-1";
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -165,65 +159,66 @@ const DiscoverySection = ({
   };
 
   return (
-    <motion.section
-      id="discover"
-      className="container py-8 md:py-12 space-y-8 md:space-y-12"
-      initial={{ opacity: 0, y: 40 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-100px" }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-    >
-      <SearchFilters
-        className={stickyClasses}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        selectedCity={selectedCity}
-        onCityChange={setSelectedCity}
-        selectedNiche={selectedNiche}
-        onNicheChange={setSelectedNiche}
-        sortBy={sortBy}
-        onSortChange={setSortBy}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        resultCount={activeTab === "influencers" ? filteredInfluencers.length : filteredCampaigns.length}
-        verifiedOnly={verifiedOnly}
-        onVerifiedChange={setVerifiedOnly}
-      />
+    <section id="discover" className="container space-y-6 py-6 md:space-y-12 md:py-12">
+      <div className={filterWrapperClasses}>
+        <SearchFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedCity={selectedCity}
+          onCityChange={setSelectedCity}
+          selectedNiche={selectedNiche}
+          onNicheChange={setSelectedNiche}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          resultCount={activeTab === "influencers" ? filteredInfluencers.length : filteredCampaigns.length}
+          verifiedOnly={verifiedOnly}
+          onVerifiedChange={setVerifiedOnly}
+        />
+      </div>
 
-      {loading ? (
-        <LoadingSkeleton />
-      ) : activeTab === "influencers" ? (
-        filteredInfluencers.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {filteredInfluencers.map((inf, i) => (
-              <InfluencerCard
-                key={inf.id}
-                influencer={inf}
-                index={i}
-                isOwn={inf.id === ownInfluencerId}
-              />
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+      >
+        {loading ? (
+          <LoadingSkeleton />
+        ) : activeTab === "influencers" ? (
+          filteredInfluencers.length > 0 ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredInfluencers.map((inf, i) => (
+                <InfluencerCard
+                  key={inf.id}
+                  influencer={inf}
+                  index={i}
+                  isOwn={inf.id === ownInfluencerId}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyInfluencerState 
+              influencersCount={influencers.length} 
+              onClearFilters={clearFilters} 
+            />
+          )
+        ) : filteredCampaigns.length > 0 ? (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {filteredCampaigns.map((c, i) => (
+              <CampaignCard key={c.id} campaign={c} index={i} />
             ))}
           </div>
         ) : (
-          <EmptyInfluencerState 
-            influencersCount={influencers.length} 
+          <EmptyCampaignState 
+            campaignsCount={campaigns.length} 
+            ownBrandId={ownBrandId} 
             onClearFilters={clearFilters} 
           />
-        )
-      ) : filteredCampaigns.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredCampaigns.map((c, i) => (
-            <CampaignCard key={c.id} campaign={c} index={i} />
-          ))}
-        </div>
-      ) : (
-        <EmptyCampaignState 
-          campaignsCount={campaigns.length} 
-          ownBrandId={ownBrandId} 
-          onClearFilters={clearFilters} 
-        />
-      )}
-    </motion.section>
+        )}
+      </motion.div>
+    </section>
   );
 };
 

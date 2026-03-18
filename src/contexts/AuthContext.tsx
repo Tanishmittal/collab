@@ -33,9 +33,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Track ongoing profile fetches to prevent redundant parallel calls
   const profileFetchingRef = useRef<string | null>(null);
+  const resolvedProfilesUserRef = useRef<string | null>(null);
 
-  const fetchProfiles = async (uid: string) => {
-    if (profileFetchingRef.current === uid) {
+  const fetchProfiles = async (uid: string, force = false) => {
+    if (!force && resolvedProfilesUserRef.current === uid) {
+      console.log("[AuthContext] Profiles already resolved for user:", uid);
+      setLoading(false);
+      return;
+    }
+
+    if (!force && profileFetchingRef.current === uid) {
       console.log("[AuthContext] Profiles already being fetched for user:", uid);
       return;
     }
@@ -68,6 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setInfluencerId(influencerRes.data?.id ?? null);
       setBrandId(brandRes.data?.id ?? null);
+      resolvedProfilesUserRef.current = uid;
     } catch (error) {
       console.error("[AuthContext] Error fetching profiles:", error);
     } finally {
@@ -108,6 +116,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (session?.user) {
           await fetchProfiles(session.user.id);
         } else {
+          resolvedProfilesUserRef.current = null;
           setLoading(false);
         }
       } catch (error: any) {
@@ -151,9 +160,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUser(session?.user ?? null);
           
           if (session?.user) {
-            setLoading(true);
-            fetchProfiles(session.user.id);
+            if (resolvedProfilesUserRef.current !== session.user.id) {
+              setLoading(true);
+              fetchProfiles(session.user.id);
+            } else {
+              console.log("[AuthContext] Skipping redundant profile fetch for user:", session.user.id);
+              setLoading(false);
+            }
           } else {
+            resolvedProfilesUserRef.current = null;
+            profileFetchingRef.current = null;
             setInfluencerId(null);
             setBrandId(null);
             setLoading(false);
@@ -170,13 +186,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    resolvedProfilesUserRef.current = null;
+    profileFetchingRef.current = null;
     setInfluencerId(null);
     setBrandId(null);
   };
 
   const refreshProfiles = async () => {
     if (user) {
-      await fetchProfiles(user.id);
+      resolvedProfilesUserRef.current = null;
+      await fetchProfiles(user.id, true);
     }
   };
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { LogOut, Mail, User, Shield, Info, ChevronRight, Loader2 } from "lucide-react";
+import { LogOut, Mail, User, Shield, Info, ChevronRight, Loader2, Star, Building2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 const Settings = () => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, influencerId, brandId } = useAuth();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -51,16 +51,30 @@ const Settings = () => {
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 px-1">General</h2>
           <Card className="overflow-hidden rounded-2xl border-slate-100 shadow-sm">
             <CardContent className="p-0 divide-y divide-slate-100">
-              <button
-                className="w-full flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors text-left"
-                onClick={() => navigate("/profile")}
-              >
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <User size={18} className="text-blue-600" />
-                </div>
-                <span className="flex-1 font-medium text-slate-800 text-sm">Manage Profiles</span>
-                <ChevronRight size={16} className="text-slate-300" />
-              </button>
+              {influencerId && (
+                <button
+                  className="w-full flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors text-left"
+                  onClick={() => navigate(`/influencer/${influencerId}?tab=influencer`)}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+                    <Star size={18} className="text-amber-600" />
+                  </div>
+                  <span className="flex-1 font-medium text-slate-800 text-sm">Influencer Profile</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+              )}
+              {brandId && (
+                <button
+                  className="w-full flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors text-left"
+                  onClick={() => navigate(`/brand/${brandId}?tab=brand`)}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center">
+                    <Building2 size={18} className="text-teal-600" />
+                  </div>
+                  <span className="flex-1 font-medium text-slate-800 text-sm">Brand Profile</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+              )}
               <button
                 className="w-full flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors text-left"
                 onClick={() => navigate("/edit-profile")}
@@ -71,6 +85,18 @@ const Settings = () => {
                 <span className="flex-1 font-medium text-slate-800 text-sm">Edit Influencer Profile</span>
                 <ChevronRight size={16} className="text-slate-300" />
               </button>
+              {brandId && (
+                <button
+                  className="w-full flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors text-left"
+                  onClick={() => navigate("/edit-brand-profile")}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center">
+                    <Building2 size={18} className="text-teal-600" />
+                  </div>
+                  <span className="flex-1 font-medium text-slate-800 text-sm">Edit Brand Profile</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+              )}
             </CardContent>
           </Card>
         </motion.div>

@@ -187,6 +187,11 @@
   60% {transform: translateY(-5px) translateX(-50%);}
 }
 
+@keyframes guest-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 .animate-bounce-slow {
   animation: bounce-slow 2s infinite;
 }

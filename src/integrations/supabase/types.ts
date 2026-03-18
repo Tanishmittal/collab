@@ -16,7 +16,9 @@ export type Database = {
     Tables: {
       bookings: {
         Row: {
+          application_id: string | null
           brand_user_id: string
+          campaign_id: string | null
           created_at: string
           id: string
           influencer_profile_id: string
@@ -28,7 +30,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          application_id?: string | null
           brand_user_id: string
+          campaign_id?: string | null
           created_at?: string
           id?: string
           influencer_profile_id: string
@@ -40,7 +44,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          application_id?: string | null
           brand_user_id?: string
+          campaign_id?: string | null
           created_at?: string
           id?: string
           influencer_profile_id?: string
@@ -53,6 +59,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "bookings_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bookings_influencer_profile_id_fkey"
             columns: ["influencer_profile_id"]
             isOneToOne: false
@@ -63,17 +83,25 @@ export type Database = {
       }
       brand_profiles: {
         Row: {
+          brand_tagline: string | null
           business_name: string
           business_type: string
           campaigns_per_month: number | null
+          campaign_goals: string[]
           city: string
           contact_name: string
           created_at: string
+          creator_requirements: string | null
+          deliverable_preferences: string[]
           description: string | null
           email: string
           id: string
+          industry: string | null
+          is_verified: boolean
+          logo_url: string | null
           monthly_budget: string | null
           phone: string | null
+          response_time_expectation: string | null
           target_cities: string[]
           target_niches: string[]
           updated_at: string
@@ -81,17 +109,25 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          brand_tagline?: string | null
           business_name: string
           business_type: string
           campaigns_per_month?: number | null
+          campaign_goals?: string[]
           city: string
           contact_name: string
           created_at?: string
+          creator_requirements?: string | null
+          deliverable_preferences?: string[]
           description?: string | null
           email: string
           id?: string
+          industry?: string | null
+          is_verified?: boolean
+          logo_url?: string | null
           monthly_budget?: string | null
           phone?: string | null
+          response_time_expectation?: string | null
           target_cities?: string[]
           target_niches?: string[]
           updated_at?: string
@@ -99,17 +135,25 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          brand_tagline?: string | null
           business_name?: string
           business_type?: string
           campaigns_per_month?: number | null
+          campaign_goals?: string[]
           city?: string
           contact_name?: string
           created_at?: string
+          creator_requirements?: string | null
+          deliverable_preferences?: string[]
           description?: string | null
           email?: string
           id?: string
+          industry?: string | null
+          is_verified?: boolean
+          logo_url?: string | null
           monthly_budget?: string | null
           phone?: string | null
+          response_time_expectation?: string | null
           target_cities?: string[]
           target_niches?: string[]
           updated_at?: string
@@ -175,6 +219,7 @@ export type Database = {
           created_at: string
           deliverables: string[]
           description: string
+          expires_at: string | null
           id: string
           influencers_applied: number
           influencers_needed: number
@@ -191,6 +236,7 @@ export type Database = {
           created_at?: string
           deliverables?: string[]
           description?: string
+          expires_at?: string | null
           id?: string
           influencers_applied?: number
           influencers_needed?: number
@@ -207,6 +253,7 @@ export type Database = {
           created_at?: string
           deliverables?: string[]
           description?: string
+          expires_at?: string | null
           id?: string
           influencers_applied?: number
           influencers_needed?: number

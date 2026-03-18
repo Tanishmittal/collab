@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import ChatThread from "@/components/ChatThread";
+import BookingModal from "@/components/BookingModal";
 import ReviewForm from "@/components/ReviewForm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ interface CampaignRow {
   status: string;
   description: string;
   created_at: string;
+  expires_at?: string | null;
 }
 
 interface ApplicationRow {
@@ -55,6 +57,123 @@ interface ApplicationRow {
   } | null;
 }
 
+const isCampaignExpired = (campaign: CampaignRow) => {
+  if (!campaign.expires_at) return false;
+  return new Date(campaign.expires_at).getTime() < Date.now();
+};
+
+const collaborationStage = (bookingStatus?: string) => {
+  if (!bookingStatus) {
+    return {
+      label: "Accepted",
+      tone: "bg-teal-50 text-teal-700 border-teal-200",
+      description: "The collaboration is unlocked. Create or wait for a booking to define the work.",
+    };
+  }
+
+  if (bookingStatus === "pending") {
+    return {
+      label: "Booking Pending",
+      tone: "bg-amber-50 text-amber-700 border-amber-200",
+      description: "A booking has been created and is waiting for the influencer to respond.",
+    };
+  }
+
+  if (bookingStatus === "accepted") {
+    return {
+      label: "Ready To Start",
+      tone: "bg-sky-50 text-sky-700 border-sky-200",
+      description: "Both sides have agreed to the booking. The collaboration can move into execution.",
+    };
+  }
+
+  if (bookingStatus === "in_progress") {
+    return {
+      label: "In Progress",
+      tone: "bg-violet-50 text-violet-700 border-violet-200",
+      description: "Deliverables are in production and the collaboration is actively underway.",
+    };
+  }
+
+  if (bookingStatus === "completed") {
+    return {
+      label: "Completed",
+      tone: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      description: "The collaboration is complete and both sides can leave a review.",
+    };
+  }
+
+  return {
+    label: bookingStatus,
+    tone: "bg-slate-50 text-slate-700 border-slate-200",
+    description: "This collaboration has an updated booking status.",
+  };
+};
+
+const rejectPendingApplicationsForCampaign = async (campaignId: string) => {
+  const { error } = await supabase
+    .from("campaign_applications")
+    .update({ status: "rejected" })
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending");
+
+  if (error) {
+    throw error;
+  }
+};
+
+const maybeCompleteCampaign = async (campaignId: string) => {
+  const { data: campaign, error: campaignError } = await supabase
+    .from("campaigns")
+    .select("id, status")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (campaignError || !campaign || campaign.status !== "closed") {
+    return false;
+  }
+
+  const [{ data: acceptedApplications, error: acceptedError }, { data: linkedBookings, error: bookingsError }] = await Promise.all([
+    supabase
+      .from("campaign_applications")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("status", "accepted"),
+    supabase
+      .from("bookings" as any)
+      .select("application_id, status")
+      .eq("campaign_id", campaignId),
+  ]);
+
+  if (acceptedError || bookingsError) {
+    throw acceptedError || bookingsError;
+  }
+
+  const acceptedIds = (acceptedApplications || []).map((application) => application.id);
+  if (acceptedIds.length === 0) {
+    return false;
+  }
+
+  const bookingStatusByApplication = new Map<string, string>();
+  (linkedBookings || []).forEach((booking: any) => {
+    if (booking.application_id) {
+      bookingStatusByApplication.set(booking.application_id, booking.status);
+    }
+  });
+
+  const allAcceptedCompleted = acceptedIds.every((applicationId) => bookingStatusByApplication.get(applicationId) === "completed");
+  if (!allAcceptedCompleted) {
+    return false;
+  }
+
+  const { error } = await supabase.from("campaigns").update({ status: "completed" }).eq("id", campaignId);
+  if (error) {
+    throw error;
+  }
+
+  return true;
+};
+
 const CampaignDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user, influencerId } = useAuth();
@@ -69,6 +188,10 @@ const CampaignDetail = () => {
   const [submitting, setSubmitting] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [myApplication, setMyApplication] = useState<{ id: string; status: string } | null>(null);
+  const [bookingTarget, setBookingTarget] = useState<ApplicationRow | null>(null);
+  const [bookingStatusByApplication, setBookingStatusByApplication] = useState<Record<string, string>>({});
+  const [applicationCount, setApplicationCount] = useState(0);
+  const [acceptedCount, setAcceptedCount] = useState(0);
 
   const isOwner = user && campaign && campaign.user_id === user.id;
 
@@ -85,14 +208,33 @@ const CampaignDetail = () => {
     if (isOwner && id) fetchApplications();
   }, [isOwner, id]);
 
+  useEffect(() => {
+    if (id) {
+      fetchBookingStatuses();
+    }
+  }, [id]);
+
   const fetchCampaign = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("campaigns")
-      .select("*")
-      .eq("id", id!)
-      .maybeSingle();
+    const [{ data, error }, { count: totalApplications }, { count: acceptedApplications }] = await Promise.all([
+      supabase
+        .from("campaigns")
+        .select("*")
+        .eq("id", id!)
+        .maybeSingle(),
+      supabase
+        .from("campaign_applications")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id!),
+      supabase
+        .from("campaign_applications")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id!)
+        .eq("status", "accepted"),
+    ]);
     if (!error && data) setCampaign(data as CampaignRow);
+    setApplicationCount(totalApplications || 0);
+    setAcceptedCount(acceptedApplications || 0);
     setLoading(false);
   };
 
@@ -114,7 +256,29 @@ const CampaignDetail = () => {
       .select("*, influencer_profiles(id, name, city, niche, followers, engagement_rate, rating)")
       .eq("campaign_id", id!)
       .order("created_at", { ascending: false });
-    if (data) setApplications(data as ApplicationRow[]);
+    if (data) {
+      const nextApplications = data as ApplicationRow[];
+      setApplications(nextApplications);
+      setApplicationCount(nextApplications.length);
+      setAcceptedCount(nextApplications.filter((application) => application.status === "accepted").length);
+    }
+  };
+
+  const fetchBookingStatuses = async () => {
+    const { data } = await supabase
+      .from("bookings" as any)
+      .select("application_id, status")
+      .eq("campaign_id", id!);
+
+    if (!data) return;
+
+    const next: Record<string, string> = {};
+    data.forEach((booking: any) => {
+      if (booking.application_id) {
+        next[booking.application_id] = booking.status;
+      }
+    });
+    setBookingStatusByApplication(next);
   };
 
   const handleApply = async () => {
@@ -128,6 +292,24 @@ const CampaignDetail = () => {
       navigate("/profile");
       return;
     }
+    if (!campaign) return;
+
+    const campaignFull = acceptedCount >= campaign.influencers_needed;
+    const campaignExpired = isCampaignExpired(campaign);
+    const campaignUnavailable = campaign.status !== "active" || campaignFull || campaignExpired;
+
+    if (campaignUnavailable) {
+      toast({
+        title: "Campaign unavailable",
+        description: campaignExpired
+          ? "This campaign has expired."
+          : campaignFull
+            ? "This campaign is already full."
+            : `This campaign is ${campaign.status}.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     setSubmitting(true);
     const { error } = await supabase.from("campaign_applications").insert({
@@ -136,6 +318,7 @@ const CampaignDetail = () => {
       user_id: user.id,
       message: applyMessage.trim().slice(0, 500),
     });
+
     setSubmitting(false);
 
     if (error) {
@@ -145,10 +328,85 @@ const CampaignDetail = () => {
       setApplyOpen(false);
       setApplyMessage("");
       setHasApplied(true);
+      setApplicationCount((current) => current + 1);
     }
   };
 
   const updateApplicationStatus = async (appId: string, status: string) => {
+    const { data: application, error: applicationError } = await supabase
+      .from("campaign_applications")
+      .select("id, campaign_id, user_id, status")
+      .eq("id", appId)
+      .maybeSingle();
+
+    if (applicationError || !application || !campaign) {
+      toast({ title: "Error", description: applicationError?.message || "Application not found.", variant: "destructive" });
+      return;
+    }
+
+    if (status === "accepted") {
+      const expired = isCampaignExpired(campaign);
+      if (campaign.status !== "active" || expired) {
+        toast({ title: "Campaign unavailable", description: "Only active, non-expired campaigns can accept applications.", variant: "destructive" });
+        return;
+      }
+
+      const { count: acceptedCount, error: acceptedCountError } = await supabase
+        .from("campaign_applications")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", application.campaign_id)
+        .eq("status", "accepted");
+
+      if (acceptedCountError) {
+        toast({ title: "Error", description: acceptedCountError.message, variant: "destructive" });
+        return;
+      }
+
+      if ((acceptedCount || 0) >= campaign.influencers_needed) {
+        toast({ title: "Campaign full", description: "All creator slots are already filled.", variant: "destructive" });
+        return;
+      }
+
+      const { error } = await supabase.from("campaign_applications").update({ status }).eq("id", appId);
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      const nextAcceptedCount = (acceptedCount || 0) + 1;
+      let nextCampaignStatus = campaign.status;
+      if (nextAcceptedCount >= campaign.influencers_needed) {
+        nextCampaignStatus = "closed";
+        await supabase.from("campaigns").update({ status: "closed" }).eq("id", campaign.id);
+        await rejectPendingApplicationsForCampaign(campaign.id);
+      }
+
+      const { count: existingMessagesCount } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("application_id", application.id);
+
+      if (!existingMessagesCount) {
+        await supabase.from("messages").insert({
+          application_id: application.id,
+          campaign_id: application.campaign_id,
+          sender_id: campaign.user_id,
+          receiver_id: application.user_id,
+          content: `Your application for ${campaign.brand} has been accepted. You can chat here to coordinate next steps.`,
+          read: false,
+        });
+      }
+
+      setApplications((prev) => prev.map((a) => (a.id === appId ? { ...a, status } : a)));
+      setAcceptedCount(nextAcceptedCount);
+      if (nextCampaignStatus !== campaign.status) {
+        setCampaign((prev) => (prev ? { ...prev, status: nextCampaignStatus } : prev));
+      }
+      fetchBookingStatuses();
+      toast({ title: "Application accepted" });
+      return;
+    }
+
     const { error } = await supabase
       .from("campaign_applications")
       .update({ status })
@@ -176,17 +434,20 @@ const CampaignDetail = () => {
       <div className="min-h-screen bg-background">
         <Navbar variant="minimal" title="Campaign" />
         <div className="container py-20 text-center">
-          <div className="text-5xl mb-4">😕</div>
+          <div className="text-5xl mb-4">?</div>
           <h1 className="font-display font-bold text-2xl text-foreground">Campaign not found</h1>
-          <Link to="/?tab=campaigns" className="text-primary mt-4 inline-block hover:underline">← Back to Campaigns</Link>
+          <Link to="/?tab=campaigns" className="text-primary mt-4 inline-block hover:underline">Back to Campaigns</Link>
         </div>
       </div>
     );
   }
 
   const progress = campaign.influencers_needed > 0
-    ? Math.round((campaign.influencers_applied / campaign.influencers_needed) * 100)
+    ? Math.round((applicationCount / campaign.influencers_needed) * 100)
     : 0;
+  const campaignExpired = isCampaignExpired(campaign);
+  const campaignFull = acceptedCount >= campaign.influencers_needed;
+  const canApply = campaign.status === "active" && !campaignExpired && !campaignFull;
 
   return (
     <div className="min-h-screen bg-background">
@@ -208,14 +469,14 @@ const CampaignDetail = () => {
                   <h1 className="font-display font-bold text-2xl text-foreground">{campaign.brand}</h1>
                   <div className="flex items-center gap-2 text-muted-foreground text-sm mt-1">
                     <MapPin size={14} /> {campaign.city}
-                    <span className="mx-1">·</span>
+                    <span className="mx-1">•</span>
                     <Clock size={14} /> {new Date(campaign.created_at).toLocaleDateString()}
                   </div>
                 </div>
                 <Badge variant="secondary">{campaign.niche}</Badge>
               </div>
 
-              <p className="text-muted-foreground">{campaign.description}</p>
+              <p className="whitespace-pre-wrap break-words text-muted-foreground">{campaign.description}</p>
 
               <div className="flex flex-wrap gap-1.5 mt-4">
                 {campaign.deliverables.map(d => (
@@ -240,11 +501,21 @@ const CampaignDetail = () => {
 
               <div className="mt-5">
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">{campaign.influencers_applied} applied</span>
+                  <span className="text-muted-foreground">{applicationCount} applied</span>
                   <span className="text-muted-foreground">{campaign.influencers_needed} needed</span>
                 </div>
                 <Progress value={Math.min(progress, 100)} className="h-2" />
               </div>
+
+              {(!canApply || campaign.status !== "active") && (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                  {campaignExpired
+                    ? "This campaign has expired and is no longer accepting applications."
+                    : campaignFull
+                      ? "This campaign is full and is no longer accepting applications."
+                      : `This campaign is ${campaign.status} and is not accepting applications right now.`}
+                </div>
+              )}
 
               {!isOwner && (
                 <div className="mt-6">
@@ -255,6 +526,10 @@ const CampaignDetail = () => {
                   ) : hasApplied ? (
                     <Button disabled className="w-full" variant="secondary">
                       <CheckCircle size={16} className="mr-2" /> Already Applied
+                    </Button>
+                  ) : !canApply ? (
+                    <Button disabled className="w-full" variant="secondary">
+                      <XCircle size={16} className="mr-2" /> Applications Closed
                     </Button>
                   ) : (
                     <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
@@ -299,6 +574,42 @@ const CampaignDetail = () => {
         {/* Chat & Review for accepted influencer */}
         {!isOwner && user && myApplication?.status === "accepted" && campaign && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-6 space-y-4">
+            <Card className="glass-card">
+              <CardContent className="p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Collaboration Workspace</p>
+                    <h2 className="mt-1 font-display text-xl font-bold text-foreground">Working with {campaign.brand}</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {collaborationStage(bookingStatusByApplication[myApplication.id]).description}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={`w-fit border px-3 py-1 text-xs font-semibold ${collaborationStage(bookingStatusByApplication[myApplication.id]).tone}`}>
+                    {collaborationStage(bookingStatusByApplication[myApplication.id]).label}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border bg-muted/30 px-3 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Application</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">Accepted</div>
+                  </div>
+                  <div className="rounded-xl border bg-muted/30 px-3 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Booking</div>
+                    <div className="mt-1 text-sm font-semibold capitalize text-foreground">
+                      {bookingStatusByApplication[myApplication.id] || "Not created"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border bg-muted/30 px-3 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Review</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {bookingStatusByApplication[myApplication.id] === "completed" ? "Ready" : "Locked"}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <h2 className="font-display font-bold text-xl">Chat with {campaign.brand}</h2>
             <ChatThread
               applicationId={myApplication.id}
@@ -306,7 +617,7 @@ const CampaignDetail = () => {
               otherUserId={campaign.user_id}
               otherUserName={campaign.brand}
             />
-            {campaign.status === "closed" && (
+            {bookingStatusByApplication[myApplication.id] === "completed" && (
               <>
                 <h2 className="font-display font-bold text-xl">Leave a Review</h2>
                 <ReviewForm
@@ -360,8 +671,8 @@ const CampaignDetail = () => {
                                 </Link>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                                   {profile?.city && <span className="flex items-center gap-0.5"><MapPin size={10} /> {profile.city}</span>}
-                                  {profile?.followers && <span>· {profile.followers} followers</span>}
-                                  {profile?.rating && <span>· ⭐ {profile.rating}</span>}
+                                  {profile?.followers && <span>• {profile.followers} followers</span>}
+                                  {profile?.rating && <span>• Star {profile.rating}</span>}
                                 </div>
                               </div>
                             </div>
@@ -404,13 +715,56 @@ const CampaignDetail = () => {
 
                           {app.status === "accepted" && (
                             <div className="mt-3 space-y-3">
+                              <div className="rounded-xl border bg-muted/30 p-3">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                  <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Collaboration Workspace</p>
+                                    <p className="mt-1 text-sm font-semibold text-foreground">
+                                      {collaborationStage(bookingStatusByApplication[app.id]).label}
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      {collaborationStage(bookingStatusByApplication[app.id]).description}
+                                    </p>
+                                  </div>
+                                  <Badge variant="outline" className={`w-fit border px-2.5 py-1 text-[11px] font-semibold ${collaborationStage(bookingStatusByApplication[app.id]).tone}`}>
+                                    {bookingStatusByApplication[app.id] || "No booking"}
+                                  </Badge>
+                                </div>
+
+                                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                                  <div className="rounded-lg border bg-background px-3 py-2">
+                                    <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Application</div>
+                                    <div className="mt-1 text-xs font-semibold text-foreground">Accepted</div>
+                                  </div>
+                                  <div className="rounded-lg border bg-background px-3 py-2">
+                                    <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Booking</div>
+                                    <div className="mt-1 text-xs font-semibold capitalize text-foreground">
+                                      {bookingStatusByApplication[app.id] || "Not created"}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border bg-background px-3 py-2">
+                                    <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Review</div>
+                                    <div className="mt-1 text-xs font-semibold text-foreground">
+                                      {bookingStatusByApplication[app.id] === "completed" ? "Ready" : "Locked"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setBookingTarget(app)}
+                              >
+                                Create Booking
+                              </Button>
                               <ChatThread
                                 applicationId={app.id}
                                 campaignId={campaign.id}
                                 otherUserId={app.user_id}
                                 otherUserName={profile?.name || "Influencer"}
                               />
-                              {campaign.status === "closed" && (
+                              {bookingStatusByApplication[app.id] === "completed" && (
                                 <ReviewForm
                                   campaignId={campaign.id}
                                   revieweeId={app.user_id}
@@ -432,6 +786,29 @@ const CampaignDetail = () => {
               </div>
             )}
           </motion.div>
+        )}
+
+        {bookingTarget && campaign && bookingTarget.influencer_profiles && (
+          <BookingModal
+            applicationId={bookingTarget.id}
+            campaignId={campaign.id}
+            influencer={bookingTarget.influencer_profiles}
+            influencerUserId={bookingTarget.user_id}
+            isOpen={!!bookingTarget}
+            onClose={() => {
+              setBookingTarget(null);
+              fetchBookingStatuses();
+              if (campaign.id) {
+                maybeCompleteCampaign(campaign.id)
+                  .then((completed) => {
+                    if (completed) {
+                      setCampaign((prev) => (prev ? { ...prev, status: "completed" } : prev));
+                    }
+                  })
+                  .catch(() => undefined);
+              }
+            }}
+          />
         )}
       </div>
     </div>

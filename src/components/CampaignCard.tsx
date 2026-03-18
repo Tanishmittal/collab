@@ -33,8 +33,8 @@ const CampaignCard = ({ campaign, index = 0 }: { campaign: Campaign; index?: num
     >
       <div className="p-6 flex-grow flex flex-col relative z-10">
         {/* Top Header Section */}
-        <div className="flex justify-between items-start mb-5">
-          <div className="flex items-center gap-4 min-w-0">
+        <div className="mb-5 flex items-start">
+          <div className="flex min-w-0 items-center gap-4">
             <div className="w-14 h-14 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-3xl shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-500 text-gray-900">
               {campaign.brandLogo}
             </div>
@@ -53,22 +53,10 @@ const CampaignCard = ({ campaign, index = 0 }: { campaign: Campaign; index?: num
               </div>
             </div>
           </div>
-
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="flex items-center px-2 py-1 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-100 shadow-sm">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-600 mr-1.5 flex items-center gap-1">
-                <Zap size={10} className="text-indigo-500 fill-indigo-500" />
-                AI Match
-              </span>
-              <span className="text-xs font-black text-indigo-700 bg-white px-1.5 py-0.5 rounded border border-indigo-100 shadow-sm">
-                98%
-              </span>
-            </div>
-          </div>
         </div>
 
         {/* Description */}
-        <p className="text-sm text-gray-600 leading-relaxed mb-6 line-clamp-2">
+        <p className="mb-6 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-600">
           {campaign.description}
         </p>
 

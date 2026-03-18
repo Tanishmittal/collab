@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Star, Instagram, Youtube, Twitter, ExternalLink, ShieldCheck, Zap } from "lucide-react";
+import { MapPin, Star, Instagram, Youtube, Twitter, ShieldCheck, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Influencer } from "@/data/mockData";
 
@@ -30,9 +30,20 @@ const formatFollowers = (count: string | number) => {
   return num.toString();
 };
 
-const InfluencerCard = ({ influencer, index = 0, isOwn = false }: { influencer: Influencer; index?: number; isOwn?: boolean }) => {
+const InfluencerCard = ({
+  influencer,
+  index = 0,
+  isOwn = false,
+}: {
+  influencer: Influencer;
+  index?: number;
+  isOwn?: boolean;
+}) => {
   const navigate = useNavigate();
-  const initials = influencer.name.split(" ").map(n => n[0]).join("");
+  const initials = influencer.name
+    .split(" ")
+    .map((n) => n[0])
+    .join("");
   const gradientClass = nicheColors[influencer.niche] || "from-teal-400 to-indigo-400";
 
   return (
@@ -40,111 +51,94 @@ const InfluencerCard = ({ influencer, index = 0, isOwn = false }: { influencer: 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.4 }}
-      className={`group relative rounded-[1.5rem] overflow-hidden cursor-pointer transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-black/30 ${isOwn ? 'ring-2 ring-teal-500/60' : ''}`}
+      className={`group relative cursor-pointer overflow-hidden rounded-[1.5rem] transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-black/30 ${isOwn ? "ring-2 ring-teal-500/60" : ""}`}
       onClick={() => navigate(`/influencer/${influencer.id}`)}
     >
-      {/* Full Image */}
-      <div className={`aspect-[3/4] relative overflow-hidden ${!influencer.avatar ? `bg-gradient-to-br ${gradientClass}` : 'bg-gray-900'}`}>
+      <div className={`relative aspect-[3/4] overflow-hidden ${!influencer.avatar ? `bg-gradient-to-br ${gradientClass}` : "bg-gray-900"}`}>
         {influencer.avatar && (
           <img
             src={influencer.avatar}
             alt={influencer.name}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
           />
         )}
 
         {!influencer.avatar && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-7xl font-display font-bold text-white/15">{initials}</span>
+            <span className="font-display text-7xl font-bold text-white/15">{initials}</span>
           </div>
         )}
 
-        {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
 
-        {/* Top-left badges */}
-        <div className="absolute top-5 left-5 flex flex-wrap gap-2">
+        <div className="absolute left-5 top-5 flex flex-wrap gap-2">
           {isOwn && (
-            <Badge className="bg-teal-500 text-white text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 border-none shadow-md">
-              ✨ Your Profile
+            <Badge className="border-none bg-teal-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white shadow-md">
+              Your Profile
             </Badge>
           )}
           {influencer.completedCampaigns >= 10 && (
-            <Badge className="bg-amber-500/90 text-white text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 border-none">
-              🏆 Top Creator
+            <Badge className="border-none bg-amber-500/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+              Top Creator
             </Badge>
           )}
           {influencer.isVerified && influencer.engagementRate >= 5 && (
-            <Badge className="bg-white/10 backdrop-blur-md text-white text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 border border-white/20 gap-1">
-              <Zap size={10} className="text-teal-400" /> High Engagement
+            <Badge className="gap-1 border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-md">
+              <Zap size={10} className="text-teal-400" />
+              High Engagement
             </Badge>
           )}
         </div>
 
-        {/* Top-right platform icons */}
-        <div className="absolute top-5 right-5 flex flex-col gap-2.5">
-          {influencer.platforms.map(p => (
-            <div key={p} className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center border border-white/10 text-white hover:bg-teal-500 transition-colors">
+        <div className="absolute right-5 top-5 flex flex-col gap-2.5">
+          {influencer.platforms.map((p) => (
+            <div
+              key={p}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/50 text-white backdrop-blur-md transition-colors hover:bg-teal-500"
+            >
               {platformIcon(p)}
             </div>
           ))}
         </div>
 
-        {/* Bottom content overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
-          {/* Niche tag */}
-          <div className="flex items-center gap-2 mb-2">
+          <div className="mb-2 flex items-center gap-2">
             <div className={`h-1 w-6 rounded-full bg-gradient-to-r ${gradientClass}`} />
-            <span className="text-[9px] sm:text-[10px] font-bold tracking-widest uppercase text-white/80">{influencer.niche}</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-white/80 sm:text-[10px]">
+              {influencer.niche}
+            </span>
           </div>
 
-          {/* Name + verified */}
-          <div className="flex items-center gap-1.5 mb-0.5 min-w-0">
-            <h3 className="text-lg sm:text-xl font-black text-white truncate">{influencer.name}</h3>
-            {influencer.isVerified && (
-              <ShieldCheck size={14} className="text-teal-400 fill-teal-400/20 shrink-0" />
-            )}
+          <div className="mb-0.5 flex min-w-0 items-center gap-1.5">
+            <h3 className="truncate text-lg font-black text-white sm:text-xl">{influencer.name}</h3>
+            {influencer.isVerified && <ShieldCheck size={14} className="shrink-0 fill-teal-400/20 text-teal-400" />}
           </div>
 
-          {/* Location + rating */}
-          <div className="flex items-center gap-2 mb-3 sm:mb-4">
-            <div className="flex items-center gap-1 text-white/50 text-[10px] sm:text-xs">
+          <div className="mb-3 flex items-center gap-2 sm:mb-4">
+            <div className="flex items-center gap-1 text-[10px] text-white/50 sm:text-xs">
               <MapPin size={10} />
               <span className="truncate">{influencer.city}</span>
             </div>
-            <div className="flex items-center gap-1 text-teal-400 text-[10px] sm:text-xs">
+            <div className="flex items-center gap-1 text-[10px] text-teal-400 sm:text-xs">
               <Star size={10} fill="currentColor" />
               <span className="font-bold">{influencer.rating}</span>
             </div>
           </div>
 
-          {/* Stats row */}
-          <div className="flex items-center gap-6 mb-4">
+          <div className="mb-4 flex items-center gap-6">
             <div className="min-w-0">
-              <p className="text-[8px] sm:text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-0.5">Followers</p>
-              <p className="text-sm sm:text-base font-bold text-white">{formatFollowers(influencer.followers)}</p>
+              <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-gray-400 sm:text-[10px]">Followers</p>
+              <p className="text-sm font-bold text-white sm:text-base">{formatFollowers(influencer.followers)}</p>
             </div>
-            <div className="h-8 w-[1px] bg-white/15 self-center" />
+            <div className="h-8 w-[1px] self-center bg-white/15" />
             <div className="min-w-0">
-              <p className="text-[8px] sm:text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-0.5">Engage</p>
-              <p className="text-sm sm:text-base font-bold text-white">{influencer.engagementRate}%</p>
+              <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-gray-400 sm:text-[10px]">Engage</p>
+              <p className="text-sm font-bold text-white sm:text-base">{influencer.engagementRate}%</p>
             </div>
-          </div>
-
-          {/* CTA + Price row */}
-          <div className="flex items-center gap-3">
-            <button
-              className="flex-1 py-2.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl font-bold text-xs sm:text-sm text-white hover:bg-white hover:text-black transition-all flex items-center justify-center gap-1.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/influencer/${influencer.id}`);
-              }}
-            >
-              View Insights <ExternalLink size={13} />
-            </button>
-            <div className="text-right shrink-0">
-              <p className="text-[8px] sm:text-[10px] uppercase tracking-wider text-gray-400 font-bold">from</p>
-              <p className="text-sm sm:text-base font-black text-white">₹{influencer.priceReel.toLocaleString()}</p>
+            <div className="h-8 w-[1px] self-center bg-white/15" />
+            <div className="min-w-0">
+              <p className="mb-0.5 text-[8px] font-bold tracking-wider text-gray-400 sm:text-[10px]">Price</p>
+              <p className="text-sm font-black text-white sm:text-base">{influencer.priceReel.toLocaleString()}</p>
             </div>
           </div>
         </div>

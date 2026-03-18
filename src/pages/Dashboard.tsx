@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BarChart3, Users, IndianRupee, Plus, MapPin, Clock,
-  CheckCircle, XCircle, MessageSquare, Send, Trash2, Pause, Play, Archive, ShoppingCart, Hourglass,
+  CheckCircle, XCircle, MessageSquare, Send, Trash2, Pause, Play, Archive, ShoppingCart, Hourglass, Pencil,
   Megaphone, Star, TrendingUp, Eye
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
@@ -24,7 +24,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import CreateCampaignModal from "@/components/CreateCampaignModal";
+import { useDashboardData } from "@/hooks/useQuery";
 import InfluencerProfileModal from "@/components/InfluencerProfileModal";
 import ListInfluencerModal from "@/components/ListInfluencerModal";
 import JoinBrandModal from "@/components/JoinBrandModal";
@@ -53,7 +53,7 @@ interface MyApplicationRow {
 }
 
 interface BookingRow {
-  id: string; brand_user_id: string; influencer_user_id: string; influencer_profile_id: string;
+  id: string; application_id?: string | null; brand_user_id: string; campaign_id?: string | null; influencer_user_id: string; influencer_profile_id: string;
   items: { type: string; price: number; qty: number }[];
   notes: string; total_amount: number; status: string; created_at: string;
   influencer_name?: string; brand_name?: string;
@@ -67,103 +67,153 @@ const statusConfig: Record<string, { label: string; icon: React.ReactNode; varia
   rejected: { label: "Rejected", icon: <XCircle size={12} />, variant: "destructive" },
 };
 
+const bookingBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+  if (status === "accepted" || status === "completed") return "default";
+  if (status === "rejected" || status === "cancelled") return "destructive";
+  if (status === "in_progress") return "outline";
+  return "secondary";
+};
+
+const collaborationStage = (bookingStatus?: string) => {
+  if (!bookingStatus) {
+    return {
+      label: "Accepted",
+      tone: "border-teal-200 bg-teal-50 text-teal-700",
+      description: "Accepted, but no booking has been created yet.",
+    };
+  }
+
+  if (bookingStatus === "pending") {
+    return {
+      label: "Booking Pending",
+      tone: "border-amber-200 bg-amber-50 text-amber-700",
+      description: "A booking is waiting for influencer confirmation.",
+    };
+  }
+
+  if (bookingStatus === "accepted") {
+    return {
+      label: "Ready To Start",
+      tone: "border-sky-200 bg-sky-50 text-sky-700",
+      description: "Booking is accepted and ready to move into execution.",
+    };
+  }
+
+  if (bookingStatus === "in_progress") {
+    return {
+      label: "In Progress",
+      tone: "border-violet-200 bg-violet-50 text-violet-700",
+      description: "Deliverables are actively being worked on.",
+    };
+  }
+
+  if (bookingStatus === "completed") {
+    return {
+      label: "Completed",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      description: "Collaboration is finished and review can be left.",
+    };
+  }
+
+  return {
+    label: bookingStatus,
+    tone: "border-slate-200 bg-slate-50 text-slate-700",
+    description: "The collaboration has an updated booking status.",
+  };
+};
+
+const rejectPendingApplicationsForCampaign = async (campaignId: string) => {
+  const { error } = await supabase
+    .from("campaign_applications")
+    .update({ status: "rejected" })
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending");
+
+  if (error) {
+    throw error;
+  }
+};
+
+const maybeCompleteCampaign = async (campaignId: string) => {
+  const { data: campaign, error: campaignError } = await supabase
+    .from("campaigns")
+    .select("id, status")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (campaignError || !campaign || campaign.status !== "closed") {
+    return;
+  }
+
+  const [{ data: acceptedApplications, error: acceptedError }, { data: linkedBookings, error: bookingsError }] = await Promise.all([
+    supabase
+      .from("campaign_applications")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("status", "accepted"),
+    supabase
+      .from("bookings" as any)
+      .select("application_id, status")
+      .eq("campaign_id", campaignId),
+  ]);
+
+  if (acceptedError || bookingsError) {
+    throw acceptedError || bookingsError;
+  }
+
+  const acceptedIds = (acceptedApplications || []).map((application) => application.id);
+  if (acceptedIds.length === 0) {
+    return;
+  }
+
+  const bookingStatusByApplication = new Map<string, string>();
+  (linkedBookings || []).forEach((booking: any) => {
+    if (booking.application_id) {
+      bookingStatusByApplication.set(booking.application_id, booking.status);
+    }
+  });
+
+  const allAcceptedCompleted = acceptedIds.every((applicationId) => bookingStatusByApplication.get(applicationId) === "completed");
+  if (allAcceptedCompleted) {
+    const { error } = await supabase.from("campaigns").update({ status: "completed" }).eq("id", campaignId);
+    if (error) {
+      throw error;
+    }
+  }
+};
+
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-
-  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
-  const [applications, setApplications] = useState<ApplicationRow[]>([]);
-  const [myApplications, setMyApplications] = useState<MyApplicationRow[]>([]);
-  const [bookings, setBookings] = useState<BookingRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Dual identity state
-  const [hasInfluencerProfile, setHasInfluencerProfile] = useState(false);
-  const [hasBrandProfile, setHasBrandProfile] = useState(false);
-  const [influencerStats, setInfluencerStats] = useState<{
-    name: string; followers: string; rating: number | null; engagement_rate: string | null;
-  } | null>(null);
   const [activeRole, setActiveRole] = useState<Role>("brand");
 
-  useEffect(() => {
-    if (user) fetchData();
-  }, [user]);
-
-  const fetchData = async () => {
-    setLoading(true);
-
-    try {
-      // Fetch profiles to determine identity
-    const [infRes, brandRes] = await Promise.all([
-      supabase.from("influencer_profiles").select("name, followers, rating, engagement_rate").eq("user_id", user!.id).maybeSingle(),
-      supabase.from("brand_profiles").select("id").eq("user_id", user!.id).maybeSingle(),
-    ]);
-
-    const hasInf = !!infRes.data;
-    const hasBrand = !!brandRes.data; 
-    setHasInfluencerProfile(hasInf);
-    setHasBrandProfile(hasBrand);
-    if (infRes.data) setInfluencerStats(infRes.data as any);
-
-    // Default to influencer view if they have it, brand otherwise
-    if (hasInf && !hasBrand) setActiveRole("influencer");
-    else if (hasBrand) setActiveRole("brand");
-
-    const [campaignsRes, appsRes, myAppsRes, bookingsRes] = await Promise.all([
-      supabase.from("campaigns").select("*").eq("user_id", user!.id).order("created_at", { ascending: false }),
-      supabase.from("campaign_applications").select("*, influencer_profiles(*)").order("created_at", { ascending: false }),
-      supabase.from("campaign_applications")
-        .select("id, message, status, created_at, campaigns(id, brand, brand_logo, city, budget, niche, description, status)")
-        .eq("user_id", user!.id).order("created_at", { ascending: false }),
-      supabase.from("bookings" as any).select("*")
-        .or(`brand_user_id.eq.${user!.id},influencer_user_id.eq.${user!.id}`)
-        .order("created_at", { ascending: false }),
-    ]);
-
-    if (campaignsRes.data) setCampaigns(campaignsRes.data as CampaignRow[]);
-
-    if (appsRes.data && campaignsRes.data) {
-      const campaignIds = new Set(campaignsRes.data.map(c => c.id));
-      setApplications((appsRes.data as ApplicationRow[]).filter(a => campaignIds.has(a.campaign_id)));
-    }
-
-    if (myAppsRes.data) setMyApplications(myAppsRes.data as MyApplicationRow[]);
-
-    if (bookingsRes.data) {
-      const enriched = await Promise.all(
-        (bookingsRes.data as any[]).map(async (b: any) => {
-          const otherId = b.brand_user_id === user!.id ? b.influencer_user_id : b.brand_user_id;
-          const { data: profile } = await supabase.from("profiles").select("display_name").eq("user_id", otherId).maybeSingle();
-          const { data: infProfile } = await supabase.from("influencer_profiles").select("name").eq("id", b.influencer_profile_id).maybeSingle();
-          return { ...b, influencer_name: infProfile?.name || "Influencer", brand_name: profile?.display_name || "Brand" } as BookingRow;
-        })
-      );
-      setBookings(enriched);
-    }
-
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch all dashboard data with React Query (replaces 26+ queries)
+  const { data: dashboardData, isLoading, refetch } = useDashboardData(user?.id);
 
   // ---- Stats ----
   const brandStats = useMemo(() => {
+    if (!dashboardData?.campaigns) return [];
+    const campaigns = dashboardData.campaigns;
+    const applications = dashboardData.applications_received;
+
     const active = campaigns.filter(c => c.status === "active").length;
     const totalBudget = campaigns.reduce((s, c) => s + c.budget, 0);
     const totalApps = applications.length;
     const accepted = applications.filter(a => a.status === "accepted").length;
     return [
       { label: "Active Campaigns", value: String(active), icon: BarChart3, sub: `${campaigns.length} total` },
-      { label: "Total Budget", value: `₹${totalBudget.toLocaleString()}`, icon: IndianRupee, sub: `across ${campaigns.length} campaigns` },
+      { label: "Total Budget", value: `Rs. ${totalBudget.toLocaleString()}`, icon: IndianRupee, sub: `across ${campaigns.length} campaigns` },
       { label: "Received Apps", value: String(totalApps), icon: Send, sub: `${applications.filter(a => a.status === "pending").length} pending` },
       { label: "Accepted", value: String(accepted), icon: Users, sub: `${accepted} influencers hired` },
     ];
-  }, [campaigns, applications]);
+  }, [dashboardData?.campaigns, dashboardData?.applications_received]);
 
   const influencerStatsCards = useMemo(() => {
+    if (!dashboardData) return [];
+    const myApplications = dashboardData.my_applications;
+    const bookings = dashboardData.bookings;
+
     const pending = myApplications.filter(a => a.status === "pending").length;
     const accepted = myApplications.filter(a => a.status === "accepted").length;
     const myBookings = bookings.filter(b => b.influencer_user_id === user?.id);
@@ -172,35 +222,209 @@ const Dashboard = () => {
       { label: "Applications", value: String(myApplications.length), icon: Send, sub: `${pending} pending` },
       { label: "Accepted", value: String(accepted), icon: CheckCircle, sub: "collaborations" },
       { label: "Bookings", value: String(myBookings.length), icon: ShoppingCart, sub: `${myBookings.filter(b => b.status === "pending").length} pending` },
-      { label: "Earnings", value: `₹${earnings.toLocaleString()}`, icon: IndianRupee, sub: "from accepted bookings" },
+      { label: "Earnings", value: `Rs. ${earnings.toLocaleString()}`, icon: IndianRupee, sub: "from accepted bookings" },
     ];
-  }, [myApplications, bookings, user]);
+  }, [dashboardData, user?.id]);
+
+  const defaultRole = useMemo<Role>(() => {
+    if (dashboardData?.influencer_profile && !dashboardData?.brand_profile) {
+      return "influencer";
+    }
+    return "brand";
+  }, [dashboardData?.influencer_profile, dashboardData?.brand_profile]);
+
+  useEffect(() => {
+    setActiveRole((currentRole) => {
+      if (currentRole === "brand" && defaultRole === "influencer" && !dashboardData?.brand_profile) {
+        return "influencer";
+      }
+      if (currentRole === "influencer" && defaultRole === "brand" && !dashboardData?.influencer_profile) {
+        return "brand";
+      }
+      return currentRole;
+    });
+  }, [defaultRole, dashboardData?.brand_profile, dashboardData?.influencer_profile]);
 
   // ---- Handlers ----
-  const handleCampaignCreated = () => fetchData();
-
   const updateBookingStatus = async (bookingId: string, status: string) => {
+    const { data: booking, error: bookingError } = await supabase
+      .from("bookings" as any)
+      .select("id, campaign_id")
+      .eq("id", bookingId)
+      .maybeSingle();
+
+    if (bookingError || !booking) {
+      toast({ title: "Booking update failed", description: bookingError?.message || "Booking not found.", variant: "destructive" });
+      return;
+    }
+
     const { error } = await supabase.from("bookings" as any).update({ status } as any).eq("id", bookingId);
-    if (!error) { setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status } : b)); toast({ title: `Booking ${status}` }); }
+    if (error) {
+      toast({ title: "Booking update failed", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    if (status === "completed" && booking.campaign_id) {
+      try {
+        await maybeCompleteCampaign(booking.campaign_id);
+      } catch (completionError: any) {
+        toast({ title: "Booking updated", description: completionError?.message || "Campaign completion check failed.", variant: "destructive" });
+        refetch();
+        return;
+      }
+    }
+
+    refetch();
+    toast({ title: `Booking ${status}` });
   };
 
   const updateApplicationStatus = async (appId: string, status: string) => {
+    const { data: application, error: applicationError } = await supabase
+      .from("campaign_applications")
+      .select("id, campaign_id, user_id, status")
+      .eq("id", appId)
+      .maybeSingle();
+
+    if (applicationError || !application) {
+      toast({ title: "Error", description: applicationError?.message || "Application not found.", variant: "destructive" });
+      return;
+    }
+
+    if (status === "accepted") {
+      const { data: campaign, error: campaignError } = await supabase
+        .from("campaigns")
+        .select("id, user_id, brand, influencers_needed, status, expires_at")
+        .eq("id", application.campaign_id)
+        .maybeSingle();
+
+      if (campaignError || !campaign) {
+        toast({ title: "Error", description: campaignError?.message || "Campaign not found.", variant: "destructive" });
+        return;
+      }
+
+      const isExpired = campaign.expires_at ? new Date(campaign.expires_at).getTime() < Date.now() : false;
+      if (campaign.status !== "active" || isExpired) {
+        toast({ title: "Campaign unavailable", description: "Only active, non-expired campaigns can accept applications.", variant: "destructive" });
+        return;
+      }
+
+      const { count: acceptedCount, error: acceptedCountError } = await supabase
+        .from("campaign_applications")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", application.campaign_id)
+        .eq("status", "accepted");
+
+      if (acceptedCountError) {
+        toast({ title: "Error", description: acceptedCountError.message, variant: "destructive" });
+        return;
+      }
+
+      if ((acceptedCount || 0) >= campaign.influencers_needed) {
+        toast({ title: "Campaign full", description: "All creator slots are already filled.", variant: "destructive" });
+        return;
+      }
+
+      const { error } = await supabase.from("campaign_applications").update({ status }).eq("id", appId);
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      const nextAcceptedCount = (acceptedCount || 0) + 1;
+      if (nextAcceptedCount >= campaign.influencers_needed) {
+        await supabase.from("campaigns").update({ status: "closed" }).eq("id", campaign.id);
+        await rejectPendingApplicationsForCampaign(campaign.id);
+      }
+
+      const { count: existingMessagesCount } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("application_id", application.id);
+
+      if (!existingMessagesCount) {
+        await supabase.from("messages").insert({
+          application_id: application.id,
+          campaign_id: application.campaign_id,
+          sender_id: campaign.user_id,
+          receiver_id: application.user_id,
+          content: `Your application for ${campaign.brand} has been accepted. You can chat here to coordinate next steps.`,
+          read: false,
+        });
+      }
+
+      refetch();
+      toast({ title: "Application accepted" });
+      return;
+    }
+
     const { error } = await supabase.from("campaign_applications").update({ status }).eq("id", appId);
-    if (!error) { setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a)); toast({ title: `Application ${status}` }); }
+    if (!error) {
+      refetch(); // Refresh dashboard data
+      toast({ title: `Application ${status}` });
+    }
   };
 
   const toggleCampaignStatus = async (campaignId: string, newStatus: string) => {
     const { error } = await supabase.from("campaigns").update({ status: newStatus }).eq("id", campaignId);
-    if (!error) { setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: newStatus } : c)); toast({ title: `Campaign ${newStatus}` }); }
+    if (error) {
+      toast({ title: "Campaign update failed", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    if (newStatus === "closed") {
+      try {
+        await rejectPendingApplicationsForCampaign(campaignId);
+        await maybeCompleteCampaign(campaignId);
+      } catch (statusError: any) {
+        toast({ title: "Campaign updated", description: statusError?.message || "Pending applications could not be resolved.", variant: "destructive" });
+        refetch();
+        return;
+      }
+    }
+
+    refetch();
+    toast({ title: `Campaign ${newStatus}` });
   };
 
   const deleteCampaign = async (campaignId: string) => {
+    const { count: applicationsCount, error: applicationsError } = await supabase
+      .from("campaign_applications")
+      .select("*", { count: "exact", head: true })
+      .eq("campaign_id", campaignId);
+
+    if (applicationsError) {
+      toast({ title: "Delete failed", description: applicationsError.message, variant: "destructive" });
+      return;
+    }
+
+    const { count: linkedBookingsCount, error: bookingsError } = await supabase
+      .from("bookings" as any)
+      .select("*", { count: "exact", head: true })
+      .eq("campaign_id", campaignId);
+
+    if (bookingsError) {
+      toast({ title: "Delete failed", description: bookingsError.message, variant: "destructive" });
+      return;
+    }
+
+    if ((applicationsCount || 0) > 0 || (linkedBookingsCount || 0) > 0) {
+      toast({
+        title: "Cannot delete campaign",
+        description: "This campaign already has applications or bookings. Close it instead of deleting it.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const { error } = await supabase.from("campaigns").delete().eq("id", campaignId);
-    if (!error) { setCampaigns(prev => prev.filter(c => c.id !== campaignId)); setApplications(prev => prev.filter(a => a.campaign_id !== campaignId)); toast({ title: "Campaign deleted" }); }
+    if (!error) {
+      refetch(); // Refresh dashboard data
+      toast({ title: "Campaign deleted" });
+    }
   };
 
   // ---- Loading/Auth states ----
-  if (authLoading || loading) {
+  if (authLoading || isLoading) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar variant="minimal" title="Dashboard" />
@@ -225,6 +449,10 @@ const Dashboard = () => {
     );
   }
 
+  const campaigns = dashboardData?.campaigns || [];
+  const applications = dashboardData?.applications_received || [];
+  const myApplications = dashboardData?.my_applications || [];
+  const bookings = dashboardData?.bookings || [];
   const pendingApps = applications.filter(a => a.status === "pending");
   const getCampaignName = (campaignId: string) => campaigns.find(c => c.id === campaignId)?.brand || "Unknown";
   const currentStats = activeRole === "brand" ? brandStats : influencerStatsCards;
@@ -236,7 +464,7 @@ const Dashboard = () => {
 
         {/* Identity Switcher */}
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="font-display font-bold text-2xl text-foreground">Dashboard</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
@@ -244,22 +472,17 @@ const Dashboard = () => {
               </p>
             </div>
             {activeRole === "brand" && (
-              <CreateCampaignModal
-                trigger={
-                  <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-9">
-                    <Plus size={16} className="mr-1" /> Campaign
-                  </Button>
-                }
-                onCreated={handleCampaignCreated}
-              />
+              <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-9" onClick={() => navigate("/create-campaign")}>
+                <Plus size={16} className="mr-1" /> Campaign
+              </Button>
             )}
           </div>
 
           {/* Role pills */}
-          <div className="flex gap-2 p-1 bg-muted/50 rounded-xl w-fit">
+          <div className="flex w-full gap-2 rounded-xl bg-muted/50 p-1 sm:w-fit">
             <button
               onClick={() => setActiveRole("brand")}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all sm:flex-none ${
                 activeRole === "brand"
                   ? "bg-white text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -269,7 +492,7 @@ const Dashboard = () => {
             </button>
             <button
               onClick={() => setActiveRole("influencer")}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all sm:flex-none ${
                 activeRole === "influencer"
                   ? "bg-white text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -310,12 +533,11 @@ const Dashboard = () => {
                 getCampaignName={getCampaignName}
                 user={user}
                 navigate={navigate}
-                handleCampaignCreated={handleCampaignCreated}
                 updateApplicationStatus={updateApplicationStatus}
                 toggleCampaignStatus={toggleCampaignStatus}
                 deleteCampaign={deleteCampaign}
                 updateBookingStatus={updateBookingStatus}
-                hasBrandProfile={hasBrandProfile}
+                hasBrandProfile={!!dashboardData?.brand_profile}
               />
             </motion.div>
           ) : (
@@ -323,8 +545,8 @@ const Dashboard = () => {
               <InfluencerDashboard
                 myApplications={myApplications}
                 bookings={bookings.filter(b => b.influencer_user_id === user.id)}
-                hasProfile={hasInfluencerProfile}
-                profileStats={influencerStats}
+                hasProfile={!!dashboardData?.influencer_profile}
+                profileStats={dashboardData?.influencer_profile}
                 navigate={navigate}
                 updateBookingStatus={updateBookingStatus}
               />
@@ -345,7 +567,6 @@ interface BrandDashboardProps {
   getCampaignName: (id: string) => string;
   user: any;
   navigate: any;
-  handleCampaignCreated: () => void;
   updateApplicationStatus: (id: string, status: string) => void;
   toggleCampaignStatus: (id: string, status: string) => void;
   deleteCampaign: (id: string) => void;
@@ -355,12 +576,12 @@ interface BrandDashboardProps {
 
 const BrandDashboard = ({
   campaigns, applications, bookings, pendingApps, getCampaignName,
-  user, navigate, handleCampaignCreated,
+  user, navigate,
   updateApplicationStatus, toggleCampaignStatus, deleteCampaign, updateBookingStatus,
   hasBrandProfile
 }: BrandDashboardProps) => (
   <Tabs defaultValue="campaigns" className="w-full">
-    <TabsList className="w-full grid grid-cols-3 mb-4">
+    <TabsList className="mb-4 grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
       <TabsTrigger value="campaigns" className="font-display text-xs">Campaigns</TabsTrigger>
       <TabsTrigger value="received-apps" className="font-display text-xs">
         Apps ({pendingApps.length})
@@ -381,14 +602,9 @@ const BrandDashboard = ({
             <h3 className="font-display font-semibold text-lg text-foreground">No campaigns yet</h3>
             <p className="text-muted-foreground mt-1 text-sm">Create your first campaign to connect with influencers.</p>
             {hasBrandProfile ? (
-              <CreateCampaignModal
-                trigger={
-                  <Button className="mt-4 gradient-primary border-0 text-primary-foreground">
-                    <Plus size={16} className="mr-2" /> Create Campaign
-                  </Button>
-                }
-                onCreated={handleCampaignCreated}
-              />
+              <Button className="mt-4 gradient-primary border-0 text-primary-foreground" onClick={() => navigate("/create-campaign")}>
+                <Plus size={16} className="mr-2" /> Create Campaign
+              </Button>
             ) : (
               <JoinBrandModal
                 trigger={
@@ -412,33 +628,60 @@ const BrandDashboard = ({
               <motion.div key={c.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <Card className="glass-card hover:shadow-lg transition-shadow">
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-11 h-11 rounded-xl bg-muted flex items-center justify-center text-xl shrink-0">{c.brand_logo}</div>
                         <div className="min-w-0">
                           <Link to={`/campaign/${c.id}`} className="font-display font-semibold text-foreground hover:text-primary transition-colors truncate block text-sm">{c.brand}</Link>
-                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                            <MapPin size={10} /> {c.city} <span>·</span> <Clock size={10} /> {new Date(c.created_at).toLocaleDateString()}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                            <MapPin size={10} /> {c.city} <span>•</span> <Clock size={10} /> {new Date(c.created_at).toLocaleDateString()}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Badge
-                              variant={c.status === "active" ? "default" : c.status === "paused" ? "outline" : "secondary"}
-                              className={`cursor-pointer text-[10px] h-5 ${c.status === "active" ? "gradient-primary border-0 text-primary-foreground" : c.status === "paused" ? "border-warning text-warning" : ""}`}
+                              variant={
+                                c.status === "active"
+                                  ? "default"
+                                  : c.status === "paused"
+                                    ? "outline"
+                                    : c.status === "completed"
+                                      ? "default"
+                                      : "secondary"
+                              }
+                              className={`cursor-pointer text-[10px] h-5 ${
+                                c.status === "active"
+                                  ? "gradient-primary border-0 text-primary-foreground"
+                                  : c.status === "paused"
+                                    ? "border-warning text-warning"
+                                    : c.status === "completed"
+                                      ? "border-0 bg-emerald-100 text-emerald-700"
+                                      : ""
+                              }`}
                             >
                               {c.status === "active" && <Play size={8} className="mr-0.5" />}
                               {c.status === "paused" && <Pause size={8} className="mr-0.5" />}
                               {c.status === "closed" && <Archive size={8} className="mr-0.5" />}
+                              {c.status === "completed" && <CheckCircle size={8} className="mr-0.5" />}
                               {c.status}
                             </Badge>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-36">
-                            {c.status !== "active" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "active")} className="gap-2 text-success"><Play size={14} /> Set Active</DropdownMenuItem>}
-                            {c.status !== "paused" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "paused")} className="gap-2 text-warning"><Pause size={14} /> Pause</DropdownMenuItem>}
-                            {c.status !== "closed" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "closed")} className="gap-2 text-muted-foreground"><Archive size={14} /> Close</DropdownMenuItem>}
+                            {c.status !== "completed" && (
+                              <DropdownMenuItem onClick={() => navigate(`/edit-campaign/${c.id}`)} className="gap-2">
+                                <Pencil size={14} /> Edit
+                              </DropdownMenuItem>
+                            )}
+                            {c.status !== "active" && c.status !== "completed" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "active")} className="gap-2 text-success"><Play size={14} /> Set Active</DropdownMenuItem>}
+                            {c.status !== "paused" && c.status !== "completed" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "paused")} className="gap-2 text-warning"><Pause size={14} /> Pause</DropdownMenuItem>}
+                            {c.status !== "closed" && c.status !== "completed" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "closed")} className="gap-2 text-muted-foreground"><Archive size={14} /> Close</DropdownMenuItem>}
+                            {c.status === "completed" && (
+                              <DropdownMenuItem disabled className="gap-2 text-muted-foreground">
+                                <CheckCircle size={14} /> Completed
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                         <AlertDialog>
@@ -453,7 +696,7 @@ const BrandDashboard = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2 mt-3">
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                       <div className="p-1.5 rounded-lg bg-muted/50 text-center">
                         <div className="font-semibold text-xs text-foreground flex items-center justify-center gap-0.5"><IndianRupee size={10} />{c.budget.toLocaleString()}</div>
                         <span className="text-[10px] text-muted-foreground">Budget</span>
@@ -493,22 +736,22 @@ const BrandDashboard = ({
                                 const initials = profile?.name?.split(" ").map(n => n[0]).join("") || "?";
                                 return (
                                   <div key={app.id} className="p-2.5 rounded-lg border bg-card text-card-foreground shadow-sm">
-                                    <div className="flex items-start justify-between">
-                                      <div className="flex items-center gap-2">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                      <div className="flex items-center gap-2 min-w-0">
                                         <div className="w-7 h-7 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-display font-bold text-[10px]">{initials}</div>
-                                        <div>
+                                        <div className="min-w-0">
                                           <InfluencerProfileModal profile={profile}>{profile?.name || "Unknown"}</InfluencerProfileModal>
-                                          <div className="flex items-center gap-1 text-[9px] text-muted-foreground mt-0.5">
+                                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
                                             {profile?.city && <span className="flex items-center gap-0.5"><MapPin size={8} /> {profile.city}</span>}
                                           </div>
                                         </div>
                                       </div>
-                                      <Badge variant={app.status === "accepted" ? "default" : app.status === "rejected" ? "destructive" : "secondary"} className="text-[9px] h-4">{app.status}</Badge>
+                                      <Badge variant={app.status === "accepted" ? "default" : app.status === "rejected" ? "destructive" : "secondary"} className="h-4 w-fit text-[9px]">{app.status}</Badge>
                                     </div>
                                     {app.status === "pending" && (
-                                      <div className="flex gap-1.5 mt-2">
-                                        <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => updateApplicationStatus(app.id, "accepted")}>Accept</Button>
-                                        <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => updateApplicationStatus(app.id, "rejected")}>Reject</Button>
+                                      <div className="mt-2 flex flex-col gap-1.5 sm:flex-row">
+                                        <Button size="sm" className="h-7 text-[10px] px-2" onClick={() => updateApplicationStatus(app.id, "accepted")}>Accept</Button>
+                                        <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => updateApplicationStatus(app.id, "rejected")}>Reject</Button>
                                       </div>
                                     )}
                                   </div>
@@ -547,7 +790,7 @@ const BrandDashboard = ({
               <motion.div key={app.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}>
                 <Card className="glass-card">
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-display font-bold text-xs">{initials}</div>
                         <div>
@@ -557,7 +800,7 @@ const BrandDashboard = ({
                           </div>
                         </div>
                       </div>
-                      <Badge variant={app.status === "accepted" ? "default" : app.status === "rejected" ? "destructive" : "secondary"}>{app.status}</Badge>
+                      <Badge variant={app.status === "accepted" ? "default" : app.status === "rejected" ? "destructive" : "secondary"} className="w-fit">{app.status}</Badge>
                     </div>
                     {app.message && (
                       <div className="mt-2 p-2 rounded-lg bg-muted/50">
@@ -565,9 +808,9 @@ const BrandDashboard = ({
                       </div>
                     )}
                     {app.status === "pending" && (
-                      <div className="flex gap-2 mt-2">
-                        <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-7 px-3 text-xs" onClick={() => updateApplicationStatus(app.id, "accepted")}><CheckCircle size={12} className="mr-1" /> Accept</Button>
-                        <Button size="sm" variant="outline" className="h-7 px-3 text-xs" onClick={() => updateApplicationStatus(app.id, "rejected")}><XCircle size={12} className="mr-1" /> Reject</Button>
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-8 px-3 text-xs" onClick={() => updateApplicationStatus(app.id, "accepted")}><CheckCircle size={12} className="mr-1" /> Accept</Button>
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => updateApplicationStatus(app.id, "rejected")}><XCircle size={12} className="mr-1" /> Reject</Button>
                       </div>
                     )}
                   </CardContent>
@@ -582,14 +825,26 @@ const BrandDashboard = ({
     {/* Bookings Tab */}
     <TabsContent value="bookings">
       {bookings.length === 0 ? (
-        <Card className="glass-card"><CardContent className="p-10 text-center"><ShoppingCart size={28} className="mx-auto text-muted-foreground mb-3" /><h3 className="font-display font-semibold text-foreground">No bookings yet</h3><p className="text-muted-foreground text-sm mt-1">Direct bookings will appear here.</p></CardContent></Card>
+        <Card className="glass-card"><CardContent className="p-10 text-center"><ShoppingCart size={28} className="mx-auto text-muted-foreground mb-3" /><h3 className="font-display font-semibold text-foreground">No bookings yet</h3><p className="text-muted-foreground text-sm mt-1">Bookings created from accepted campaign applications will appear here.</p></CardContent></Card>
       ) : (
         <div className="space-y-3">
           {bookings.map((booking, i) => (
             <motion.div key={booking.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}>
               <Card className="glass-card">
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
+                  <div className="mb-3 rounded-xl border bg-muted/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Collaboration Stage</div>
+                        <div className="mt-1 text-xs font-semibold text-foreground">{collaborationStage(booking.status).label}</div>
+                      </div>
+                      <Badge variant="outline" className={`border text-[10px] font-semibold ${collaborationStage(booking.status).tone}`}>
+                        {booking.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">{collaborationStage(booking.status).description}</p>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground font-bold text-sm">{booking.influencer_name?.charAt(0) || "?"}</div>
                       <div>
@@ -597,7 +852,7 @@ const BrandDashboard = ({
                         <div className="text-[10px] text-muted-foreground">{(booking.items || []).map((item: any) => `${item.qty}x ${item.type}`).join(", ")}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 self-start sm:self-auto">
                       <span className="font-bold text-xs text-foreground flex items-center"><IndianRupee size={10} />{booking.total_amount.toLocaleString()}</span>
                       <Badge variant={booking.status === "accepted" ? "default" : booking.status === "rejected" ? "destructive" : "secondary"} className="text-[10px]">{booking.status}</Badge>
                     </div>
@@ -625,6 +880,12 @@ interface InfluencerDashboardProps {
 const InfluencerDashboard = ({
   myApplications, bookings, hasProfile, profileStats, navigate, updateBookingStatus,
 }: InfluencerDashboardProps) => {
+  const bookingByApplication = new Map(
+    bookings
+      .filter((booking) => booking.application_id)
+      .map((booking) => [booking.application_id as string, booking])
+  );
+
   if (!hasProfile) {
     return (
       <Card className="glass-card">
@@ -650,7 +911,7 @@ const InfluencerDashboard = ({
 
   return (
     <Tabs defaultValue="applications" className="w-full">
-      <TabsList className="w-full grid grid-cols-2 mb-4">
+      <TabsList className="mb-4 grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-2">
         <TabsTrigger value="applications" className="font-display text-xs">My Applications</TabsTrigger>
         <TabsTrigger value="bookings" className="font-display text-xs">
           Bookings ({bookings.filter(b => b.status === "pending").length})
@@ -673,25 +934,41 @@ const InfluencerDashboard = ({
             {myApplications.map((app, i) => {
               const campaign = app.campaigns;
               const cfg = statusConfig[app.status] || statusConfig.pending;
+              const linkedBooking = bookingByApplication.get(app.id);
+              const stage = app.status === "accepted" ? collaborationStage(linkedBooking?.status) : null;
               return (
                 <motion.div key={app.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
                   <Card className="glass-card hover:shadow-lg transition-all cursor-pointer" onClick={() => campaign && navigate(`/campaign/${campaign.id}`)}>
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-lg">{campaign?.brand_logo || "🏪"}</div>
+                          <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-lg">{campaign?.brand_logo || "B"}</div>
                           <div>
                             <h3 className="font-display font-semibold text-sm text-foreground">{campaign?.brand || "Unknown"}</h3>
-                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
                               {campaign?.city && <span className="flex items-center gap-0.5"><MapPin size={9} /> {campaign.city}</span>}
-                              {campaign?.budget && <><span>·</span><span className="flex items-center gap-0.5"><IndianRupee size={9} />{campaign.budget.toLocaleString()}</span></>}
+                              {campaign?.budget && <><span>•</span><span className="flex items-center gap-0.5"><IndianRupee size={9} />{campaign.budget.toLocaleString()}</span></>}
                             </div>
                           </div>
                         </div>
-                        <Badge variant={cfg.variant} className="gap-1 shrink-0 text-[10px]">{cfg.icon} {cfg.label}</Badge>
+                        <Badge variant={cfg.variant} className="w-fit gap-1 shrink-0 text-[10px]">{cfg.icon} {cfg.label}</Badge>
                       </div>
                       {app.message && (
                         <p className="text-[11px] text-muted-foreground mt-2 bg-muted/30 rounded-lg p-2 line-clamp-2">"{app.message}"</p>
+                      )}
+                      {stage && (
+                        <div className="mt-3 rounded-xl border bg-muted/20 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Collaboration Stage</div>
+                              <div className="mt-1 text-xs font-semibold text-foreground">{stage.label}</div>
+                            </div>
+                            <Badge variant="outline" className={`border text-[10px] font-semibold ${stage.tone}`}>
+                              {linkedBooking?.status || "No booking"}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-[11px] text-muted-foreground">{stage.description}</p>
+                        </div>
                       )}
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-2">
                         <Clock size={10} /> Applied {new Date(app.created_at).toLocaleDateString()}
@@ -712,7 +989,7 @@ const InfluencerDashboard = ({
             <CardContent className="p-10 text-center">
               <ShoppingCart size={28} className="mx-auto text-muted-foreground mb-3" />
               <h3 className="font-display font-semibold text-foreground">No bookings yet</h3>
-              <p className="text-muted-foreground text-sm mt-1">Booking requests from brands will appear here.</p>
+              <p className="text-muted-foreground text-sm mt-1">Bookings created from accepted campaigns will appear here.</p>
             </CardContent>
           </Card>
         ) : (
@@ -721,25 +998,50 @@ const InfluencerDashboard = ({
               <motion.div key={booking.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}>
                 <Card className="glass-card">
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
+                    <div className="mb-3 rounded-xl border bg-muted/20 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Collaboration Stage</div>
+                          <div className="mt-1 text-xs font-semibold text-foreground">{collaborationStage(booking.status).label}</div>
+                        </div>
+                        <Badge variant="outline" className={`border text-[10px] font-semibold ${collaborationStage(booking.status).tone}`}>
+                          {booking.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-[11px] text-muted-foreground">{collaborationStage(booking.status).description}</p>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="font-semibold text-sm text-foreground">From {booking.brand_name}</div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">{(booking.items || []).map((item: any) => `${item.qty}x ${item.type}`).join(", ")}</div>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto">
                         <span className="font-bold text-xs flex items-center"><IndianRupee size={10} />{booking.total_amount.toLocaleString()}</span>
-                        <Badge variant={booking.status === "accepted" ? "default" : booking.status === "rejected" ? "destructive" : "secondary"} className="text-[10px]">{booking.status}</Badge>
-                      </div>
+                      <Badge variant={bookingBadgeVariant(booking.status)} className="text-[10px]">{booking.status}</Badge>
                     </div>
-                    {booking.notes && <p className="text-[11px] text-muted-foreground mt-2 bg-muted/30 rounded-lg p-2">{booking.notes}</p>}
-                    {booking.status === "pending" && (
-                      <div className="flex gap-2 mt-3">
-                        <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-7 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "accepted")}><CheckCircle size={12} className="mr-1" /> Accept</Button>
-                        <Button size="sm" variant="outline" className="h-7 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "rejected")}><XCircle size={12} className="mr-1" /> Reject</Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  </div>
+                  {booking.campaign_id && (
+                    <div className="mt-2 text-[10px] text-muted-foreground">
+                      <Link to={`/campaign/${booking.campaign_id}`} className="text-primary hover:underline">Open linked campaign</Link>
+                    </div>
+                  )}
+                  {booking.notes && <p className="text-[11px] text-muted-foreground mt-2 bg-muted/30 rounded-lg p-2">{booking.notes}</p>}
+                  {booking.status === "pending" && (
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-8 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "accepted")}><CheckCircle size={12} className="mr-1" /> Accept</Button>
+                      <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "rejected")}><XCircle size={12} className="mr-1" /> Reject</Button>
+                    </div>
+                  )}
+                  {booking.status === "accepted" && (
+                    <div className="mt-3 text-[11px] text-muted-foreground">The brand will start this booking when work begins.</div>
+                  )}
+                  {booking.status === "in_progress" && (
+                    <div className="flex gap-2 mt-3">
+                      <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-7 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "completed")}><CheckCircle size={12} className="mr-1" /> Mark Complete</Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
               </motion.div>
             ))}
           </div>

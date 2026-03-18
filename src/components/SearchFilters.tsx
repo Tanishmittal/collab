@@ -39,8 +39,8 @@ const SearchFilters = ({
   return (
     <div className={`space-y-3 ${className}`}>
       {/* Tab toggle + result count */}
-      <div className="flex items-center justify-between">
-        <div className="inline-flex items-center rounded-full bg-gray-100 border border-gray-200 p-0.5 sm:p-1 gap-0.5 sm:gap-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex w-fit max-w-full items-center rounded-full border border-gray-200 bg-gray-100 p-0.5 sm:p-1 gap-0.5 sm:gap-1">
           <button
             onClick={() => onTabChange("influencers")}
             className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300 ${activeTab === "influencers"
@@ -64,13 +64,13 @@ const SearchFilters = ({
             Campaigns
           </button>
         </div>
-        <span className="text-sm font-medium text-gray-400">
+        <span className="text-xs font-medium text-gray-400 sm:text-sm">
           {resultCount} found
         </span>
       </div>
 
       {/* Search + filters single row on desktop */}
-      <div className="flex gap-3 items-center">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <Input
@@ -82,12 +82,13 @@ const SearchFilters = ({
         </div>
         <button
           onClick={() => setFiltersOpen(!filtersOpen)}
-          className={`md:hidden flex items-center justify-center w-12 h-12 rounded-xl border transition-all shrink-0 ${filtersOpen || hasActiveFilters
+          className={`md:hidden flex h-12 w-full items-center justify-center rounded-xl border transition-all shrink-0 ${filtersOpen || hasActiveFilters
             ? "bg-teal-500 text-white border-teal-500"
             : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
             }`}
         >
           <SlidersHorizontal size={18} />
+          <span className="ml-2 text-sm font-semibold">Filters</span>
         </button>
 
         <Select value={selectedCity} onValueChange={onCityChange}>
@@ -147,7 +148,7 @@ const SearchFilters = ({
             transition={{ duration: 0.2 }}
             className="md:hidden overflow-hidden"
           >
-            <div className="grid grid-cols-2 gap-3 pt-4">
+            <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2">
               <Select value={selectedCity} onValueChange={onCityChange}>
                 <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 text-gray-900 rounded-xl">
                   <SelectValue placeholder="All Cities" />
@@ -167,7 +168,7 @@ const SearchFilters = ({
                 </SelectContent>
               </Select>
               <Select value={sortBy} onValueChange={onSortChange}>
-                <SelectTrigger className="w-full h-12 col-span-2 bg-gray-50 border-gray-200 text-gray-900 rounded-xl">
+                <SelectTrigger className="w-full h-12 sm:col-span-2 bg-gray-50 border-gray-200 text-gray-900 rounded-xl">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-gray-200 text-gray-900">
@@ -181,7 +182,7 @@ const SearchFilters = ({
               {activeTab === "influencers" && (
                 <button
                   onClick={() => onVerifiedChange(!verifiedOnly)}
-                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-xl border text-sm font-medium transition-all ${verifiedOnly
+                  className={`sm:col-span-2 flex items-center justify-center gap-2 h-12 rounded-xl border text-sm font-medium transition-all ${verifiedOnly
                     ? "bg-teal-50 text-teal-600 border-teal-300"
                     : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
                     }`}

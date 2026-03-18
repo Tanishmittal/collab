@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { MessageSquare, ChevronRight } from "lucide-react";
@@ -27,6 +27,7 @@ const Messages = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
+  const subscriptionRef = useRef<any>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -42,65 +43,106 @@ const Messages = () => {
 
     try {
       // Get all messages involving this user
-    const { data: messages } = await supabase
-      .from("messages")
-      .select("*")
-      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-      .order("created_at", { ascending: false });
+      const { data: messages } = await supabase
+        .from("messages")
+        .select("*")
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order("created_at", { ascending: false });
 
-    if (!messages || messages.length === 0) {
-      setConversations([]);
-      setLoading(false);
-      return;
-    }
+      if (!messages || messages.length === 0) {
+        setConversations([]);
+        setLoading(false);
+        setupRealtimeSubscription();
+        return;
+      }
 
-    // Group by application_id
-    const grouped = new Map<string, any[]>();
-    for (const msg of messages) {
-      const key = msg.application_id;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key)!.push(msg);
-    }
+      // Group by application_id
+      const grouped = new Map<string, any[]>();
+      for (const msg of messages) {
+        const key = msg.application_id;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(msg);
+      }
 
-    const convos: Conversation[] = [];
-    for (const [appId, msgs] of grouped) {
-      const latest = msgs[0]; // already sorted desc
-      const otherUserId = latest.sender_id === user.id ? latest.receiver_id : latest.sender_id;
-      const unreadCount = msgs.filter((m: any) => m.receiver_id === user.id && !m.read).length;
+      const convos: Conversation[] = [];
+      for (const [convoId, msgs] of grouped) {
+        const latest = msgs[0]; // already sorted desc
+        const otherUserId = latest.sender_id === user.id ? latest.receiver_id : latest.sender_id;
+        const unreadCount = msgs.filter((m: any) => m.receiver_id === user.id && !m.read).length;
 
-      // Get other user's name
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("user_id", otherUserId)
-        .maybeSingle();
+        // Get other user's name
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("user_id", otherUserId)
+          .maybeSingle();
 
-      // Get campaign brand
-      const { data: campaign } = await supabase
-        .from("campaigns")
-        .select("brand")
-        .eq("id", latest.campaign_id)
-        .maybeSingle();
+        // Get campaign brand
+        const { data: campaign } = await supabase
+          .from("campaigns")
+          .select("brand")
+          .eq("id", latest.campaign_id)
+          .maybeSingle();
 
-      convos.push({
-        applicationId: appId,
-        campaignId: latest.campaign_id,
-        campaignBrand: campaign?.brand || "Campaign",
-        otherUserId,
-        otherUserName: profile?.display_name || "User",
-        lastMessage: latest.content,
-        lastMessageTime: latest.created_at,
-        unreadCount,
-      });
-    }
+        convos.push({
+          applicationId: convoId,
+          campaignId: latest.campaign_id,
+          campaignBrand: campaign?.brand || "Campaign",
+          otherUserId,
+          otherUserName: profile?.display_name || "User",
+          lastMessage: latest.content,
+          lastMessageTime: latest.created_at,
+          unreadCount,
+        });
+      }
 
       setConversations(convos);
+      setupRealtimeSubscription();
     } catch (error) {
       console.error("Error fetching conversations:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Setup realtime subscription for messages
+  const setupRealtimeSubscription = () => {
+    if (!user) return;
+
+    // Cancel previous subscription
+    if (subscriptionRef.current) {
+      supabase.removeChannel(subscriptionRef.current);
+    }
+
+    // Subscribe to new messages
+    const channel = supabase
+      .channel(`messages:user:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=eq.${user.id}|receiver_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          // New message arrived - refetch to update UI
+          fetchConversations();
+        }
+      )
+      .subscribe();
+
+    subscriptionRef.current = channel;
+  };
+
+  // Cleanup subscription on unmount
+  useEffect(() => {
+    return () => {
+      if (subscriptionRef.current) {
+        supabase.removeChannel(subscriptionRef.current);
+      }
+    };
+  }, []);
 
   if (authLoading || loading) {
     return (

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   BarChart3, MessageSquare, Search, UserCircle, Building2, 
-  Settings2, LogOut, ChevronRight, Star, Megaphone, Home
+  Settings2, LogOut, ChevronRight, Star, Megaphone, PlusSquare
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -21,23 +21,24 @@ const Sidebar = () => {
   const navGroups = [
     {
       label: "Primary",
-      items: [
+      items: [{ label: "Discover", path: "/", icon: Search },
         { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
-        { label: "Discover", path: "/", icon: Search },
+        
         { label: "Messages", path: "/messages", icon: MessageSquare },
       ]
     },
     {
       label: "Management",
       items: [
-        influencerId && brandId
-          ? { label: "My Profile", path: `/influencer/${influencerId}`, icon: UserCircle }
-          : influencerId
-            ? { label: "Influencer Profile", path: `/influencer/${influencerId}`, icon: Star }
-            : { label: "Join as Influencer", path: "/register", icon: UserCircle },
-        !(influencerId && brandId) && (brandId
-          ? { label: "Brand Profile", path: `/brand/${brandId}`, icon: Building2 }
-          : { label: "Join as Brand", path: "/register-brand", icon: Building2 }),
+        influencerId
+          ? { label: "Influencer Profile", path: `/influencer/${influencerId}?tab=influencer`, activePath: `/influencer/${influencerId}`, icon: Star }
+          : { label: "Join as Influencer", path: "/register", activePath: "/register", icon: UserCircle },
+        brandId
+          ? { label: "Brand Profile", path: `/brand/${brandId}?tab=brand`, activePath: `/brand/${brandId}`, icon: Building2 }
+          : { label: "Join as Brand", path: "/register-brand", activePath: "/register-brand", icon: Building2 },
+        ...(brandId
+          ? [{ label: "Create Campaign", path: "/create-campaign", activePath: "/create-campaign", icon: PlusSquare }]
+          : []),
       ].filter(Boolean) as any[]
     },
     {
@@ -71,7 +72,7 @@ const Sidebar = () => {
             </h3>
             <nav className="space-y-1">
               {group.items.map((item) => {
-                const isActive = location.pathname === item.path;
+                const isActive = location.pathname === (item.activePath || item.path);
                 return (
                   <Link
                     key={item.path}
