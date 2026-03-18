@@ -143,7 +143,7 @@ const InfluencerProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar variant="minimal" title="Profile" />
+      {!user && <Navbar variant="minimal" title="Profile" />}
 
       {/* Hero Banner */}
       <div className={`h-48 md:h-56 relative overflow-hidden bg-gradient-to-r ${gradientClass}`}>

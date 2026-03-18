@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const ProtectedRoute = ({ children, variant }: { children: React.ReactNode; variant?: "default" | "layout" }) => {
   const { user, loading } = useAuth();
 
   if (loading) {

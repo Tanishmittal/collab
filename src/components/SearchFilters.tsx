@@ -19,9 +19,11 @@ interface SearchFiltersProps {
   resultCount: number;
   verifiedOnly: boolean;
   onVerifiedChange: (v: boolean) => void;
+  className?: string;
 }
 
 const SearchFilters = ({
+  className,
   searchQuery, onSearchChange,
   selectedCity, onCityChange,
   selectedNiche, onNicheChange,
@@ -35,17 +37,16 @@ const SearchFilters = ({
   const hasActiveFilters = selectedCity !== "all" || selectedNiche !== "all" || sortBy !== "followers" || verifiedOnly;
 
   return (
-    <div className="space-y-3">
+    <div className={`space-y-3 ${className}`}>
       {/* Tab toggle + result count */}
-      <div className="flex items-center justify-between mt-8">
+      <div className="flex items-center justify-between">
         <div className="inline-flex items-center rounded-full bg-gray-100 border border-gray-200 p-0.5 sm:p-1 gap-0.5 sm:gap-1">
           <button
             onClick={() => onTabChange("influencers")}
-            className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300 ${
-              activeTab === "influencers"
-                ? "bg-teal-500 text-white shadow-md"
-                : "text-gray-500 hover:text-gray-800 hover:bg-gray-200"
-            }`}
+            className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300 ${activeTab === "influencers"
+              ? "bg-teal-500 text-white shadow-md"
+              : "text-gray-500 hover:text-gray-800 hover:bg-gray-200"
+              }`}
           >
             <Users size={14} className="inline-block mr-1 -mt-0.5 sm:hidden" />
             <Users size={15} className="hidden sm:inline-block mr-1.5 -mt-0.5" />
@@ -53,11 +54,10 @@ const SearchFilters = ({
           </button>
           <button
             onClick={() => onTabChange("campaigns")}
-            className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300 ${
-              activeTab === "campaigns"
-                ? "bg-teal-500 text-white shadow-md"
-                : "text-gray-500 hover:text-gray-800 hover:bg-gray-200"
-            }`}
+            className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300 ${activeTab === "campaigns"
+              ? "bg-teal-500 text-white shadow-md"
+              : "text-gray-500 hover:text-gray-800 hover:bg-gray-200"
+              }`}
           >
             <Zap size={14} className="inline-block mr-1 -mt-0.5 sm:hidden" />
             <Zap size={15} className="hidden sm:inline-block mr-1.5 -mt-0.5" />
@@ -69,7 +69,7 @@ const SearchFilters = ({
         </span>
       </div>
 
-      {/* Search + filters — single row on desktop */}
+      {/* Search + filters single row on desktop */}
       <div className="flex gap-3 items-center">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -82,15 +82,14 @@ const SearchFilters = ({
         </div>
         <button
           onClick={() => setFiltersOpen(!filtersOpen)}
-          className={`md:hidden flex items-center justify-center w-12 h-12 rounded-xl border transition-all shrink-0 ${
-            filtersOpen || hasActiveFilters
-              ? "bg-teal-500 text-white border-teal-500"
-              : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
-          }`}
+          className={`md:hidden flex items-center justify-center w-12 h-12 rounded-xl border transition-all shrink-0 ${filtersOpen || hasActiveFilters
+            ? "bg-teal-500 text-white border-teal-500"
+            : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
+            }`}
         >
           <SlidersHorizontal size={18} />
         </button>
-        
+
         <Select value={selectedCity} onValueChange={onCityChange}>
           <SelectTrigger className="hidden md:flex w-[160px] h-12 bg-gray-50 border-gray-200 text-gray-900 rounded-xl">
             <SelectValue placeholder="All Cities" />
@@ -127,11 +126,10 @@ const SearchFilters = ({
         {activeTab === "influencers" && (
           <button
             onClick={() => onVerifiedChange(!verifiedOnly)}
-            className={`hidden md:flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all shrink-0 ${
-              verifiedOnly
-                ? "bg-teal-50 text-teal-600 border-teal-300"
-                : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
-            }`}
+            className={`hidden md:flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all shrink-0 ${verifiedOnly
+              ? "bg-teal-50 text-teal-600 border-teal-300"
+              : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
+              }`}
           >
             <ShieldCheck size={16} />
             Verified
@@ -139,7 +137,7 @@ const SearchFilters = ({
         )}
       </div>
 
-      {/* Mobile filters — collapsible */}
+      {/* Mobile filters collapsible */}
       <AnimatePresence>
         {filtersOpen && (
           <motion.div
@@ -183,11 +181,10 @@ const SearchFilters = ({
               {activeTab === "influencers" && (
                 <button
                   onClick={() => onVerifiedChange(!verifiedOnly)}
-                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-xl border text-sm font-medium transition-all ${
-                    verifiedOnly
-                      ? "bg-teal-50 text-teal-600 border-teal-300"
-                      : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
-                  }`}
+                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-xl border text-sm font-medium transition-all ${verifiedOnly
+                    ? "bg-teal-50 text-teal-600 border-teal-300"
+                    : "bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800"
+                    }`}
                 >
                   <ShieldCheck size={16} />
                   Verified Only

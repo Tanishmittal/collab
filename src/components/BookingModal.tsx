@@ -12,10 +12,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 interface BookingModalProps {
-  influencer: Influencer;
+  influencer: any; // Using any for flexibility with snake_case/camelCase
   influencerUserId?: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 interface BookingItem {
@@ -24,13 +24,13 @@ interface BookingItem {
   qty: number;
 }
 
-const BookingModal = ({ influencer, influencerUserId, open, onOpenChange }: BookingModalProps) => {
+const BookingModal = ({ influencer, influencerUserId, isOpen, onClose }: BookingModalProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<BookingItem[]>([
-    { type: "Reel Promotion", price: influencer.priceReel, qty: 0 },
-    { type: "Story Promotion", price: influencer.priceStory, qty: 0 },
-    { type: "Visit & Review", price: influencer.priceVisit, qty: 0 },
+    { type: "Reel Promotion", price: influencer.price_reel || influencer.priceReel || 0, qty: 0 },
+    { type: "Story Promotion", price: influencer.price_story || influencer.priceStory || 0, qty: 0 },
+    { type: "Visit & Review", price: influencer.price_visit || influencer.priceVisit || 0, qty: 0 },
   ]);
   const [notes, setNotes] = useState("");
   const [step, setStep] = useState<"select" | "confirm" | "done">("select");
@@ -73,7 +73,7 @@ const BookingModal = ({ influencer, influencerUserId, open, onOpenChange }: Book
   };
 
   const handleClose = () => {
-    onOpenChange(false);
+    onClose();
     setTimeout(() => {
       setStep("select");
       setItems(prev => prev.map(i => ({ ...i, qty: 0 })));
@@ -84,7 +84,7 @@ const BookingModal = ({ influencer, influencerUserId, open, onOpenChange }: Book
   const initials = influencer.name.split(" ").map(n => n[0]).join("");
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display">
@@ -111,7 +111,7 @@ const BookingModal = ({ influencer, influencerUserId, open, onOpenChange }: Book
                     <div>
                       <div className="font-medium text-sm text-foreground">{item.type}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-0.5">
-                        <IndianRupee size={11} />{item.price.toLocaleString()}
+                        <IndianRupee size={11} />{(item.price || 0).toLocaleString()}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -133,7 +133,7 @@ const BookingModal = ({ influencer, influencerUserId, open, onOpenChange }: Book
 
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total</span>
-                <span className="font-display font-bold text-xl text-foreground flex items-center"><IndianRupee size={16} />{total.toLocaleString()}</span>
+                <span className="font-display font-bold text-xl text-foreground flex items-center"><IndianRupee size={16} />{(total || 0).toLocaleString()}</span>
               </div>
 
               <Button className="w-full gradient-primary border-0 text-primary-foreground" disabled={total === 0} onClick={() => setStep("confirm")}>
@@ -148,13 +148,13 @@ const BookingModal = ({ influencer, influencerUserId, open, onOpenChange }: Book
                 {selectedItems.map(item => (
                   <div key={item.type} className="flex justify-between text-sm">
                     <span className="text-foreground">{item.qty}x {item.type}</span>
-                    <span className="font-semibold text-foreground">₹{(item.price * item.qty).toLocaleString()}</span>
+                    <span className="font-semibold text-foreground">₹{(item.price * item.qty || 0).toLocaleString()}</span>
                   </div>
                 ))}
                 <Separator />
                 <div className="flex justify-between font-display font-bold">
                   <span className="text-foreground">Total</span>
-                  <span className="text-foreground">₹{total.toLocaleString()}</span>
+                  <span className="text-foreground">₹{(total || 0).toLocaleString()}</span>
                 </div>
               </div>
               {notes && <div className="p-3 rounded-lg border text-sm text-muted-foreground"><span className="font-medium text-foreground">Notes:</span> {notes}</div>}
@@ -179,7 +179,7 @@ const BookingModal = ({ influencer, influencerUserId, open, onOpenChange }: Book
               </div>
               <div className="p-3 rounded-lg bg-muted/50 text-sm">
                 <span className="text-muted-foreground">Amount in escrow: </span>
-                <span className="font-semibold text-foreground">₹{total.toLocaleString()}</span>
+                <span className="font-semibold text-foreground">₹{(total || 0).toLocaleString()}</span>
               </div>
               <Button className="w-full" variant="outline" onClick={handleClose}>Done</Button>
             </motion.div>

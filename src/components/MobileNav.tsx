@@ -8,12 +8,16 @@ import { supabase } from "@/integrations/supabase/client";
 const MobileNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, influencerId } = useAuth();
+  const { user, influencerId, brandId } = useAuth();
 
   const navItems = user ? [
     { label: "Dashboard", icon: BarChart3, path: "/dashboard" },
     { label: "Messages", icon: MessageSquare, path: "/messages" },
-    { label: "Profile", icon: User, path: "/profile" }
+    { 
+      label: influencerId || brandId ? "Profile" : "Join", 
+      icon: User, 
+      path: influencerId ? `/influencer/${influencerId}` : (brandId ? `/brand/${brandId}` : "/onboarding")
+    }
   ] : [
     { label: "Discover", icon: Search, path: "#discover", isAnchor: true },
     { label: "Features", icon: Zap, path: "#features", isAnchor: true },
@@ -29,9 +33,9 @@ const MobileNav = () => {
         className="flex items-center justify-between gap-1 px-2 h-16 bg-white/95 backdrop-blur-md border border-border/40 shadow-xl rounded-full overflow-hidden"
       >
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path && item.label !== "Profile"; 
+          const isActive = location.pathname === item.path && item.label !== "Profile" && item.label !== "Join"; 
           // Special case for profile to avoid double active state if dashboard is also active
-          const isProfileActive = item.label === "Profile" && location.pathname === "/dashboard";
+          const isProfileActive = (item.label === "Profile" || item.label === "Join") && location.pathname === "/dashboard";
           const active = isActive || isProfileActive;
 
           const content = (

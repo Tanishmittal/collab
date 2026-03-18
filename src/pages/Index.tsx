@@ -166,7 +166,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 selection:bg-teal-500/30">
-      <Navbar />
+      {(!user || window.innerWidth < 768) && <Navbar />}
 
       {!authLoading && !user && <Hero />}
 

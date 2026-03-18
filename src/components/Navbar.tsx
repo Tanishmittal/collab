@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { User, Building2, LogOut, UserCircle, BarChart3, MessageSquare, Bell, ArrowLeft, Home, Search, Settings2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,8 +87,8 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
         )}
       </div>
 
-      {/* ── DESKTOP HEADER (always global) ── */}
-      <div className="hidden md:block">
+      {/* ── DESKTOP HEADER (Guest only or specific pages) ── */}
+      <div className={cn("hidden md:block", user && "md:hidden")}>
         <div className="container flex items-center justify-between h-16 lg:h-20">
           <Link to="/" className="flex items-center gap-3 group shrink-0">
             <span className="font-display font-extrabold text-2xl tracking-tight text-gray-900 group-hover:text-teal-500 transition-colors">InfluFlow</span>
@@ -192,20 +193,33 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-52 p-1.5 rounded-xl">
-                      {influencerId && (
+                      {influencerId && brandId ? (
                         <DropdownMenuItem asChild>
                           <Link to={`/influencer/${influencerId}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
                             <UserCircle className="w-4 h-4 text-primary" />
                             <span className="text-sm font-medium">My Profile</span>
                           </Link>
                         </DropdownMenuItem>
+                      ) : (
+                        <>
+                          {influencerId && (
+                            <DropdownMenuItem asChild>
+                              <Link to={`/influencer/${influencerId}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
+                                <UserCircle className="w-4 h-4 text-primary" />
+                                <span className="text-sm font-medium">Influencer Profile</span>
+                              </Link>
+                            </DropdownMenuItem>
+                          )}
+                          {brandId && (
+                            <DropdownMenuItem asChild>
+                              <Link to={`/brand/${brandId}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
+                                <Building2 className="w-4 h-4 text-primary" />
+                                <span className="text-sm font-medium">Brand Profile</span>
+                              </Link>
+                            </DropdownMenuItem>
+                          )}
+                        </>
                       )}
-                      <DropdownMenuItem asChild>
-                        <Link to="/profile" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
-                          <User className="w-4 h-4 text-primary" />
-                          <span className="text-sm font-medium">Profile Hub</span>
-                        </Link>
-                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link to="/settings" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
                           <Settings2 className="w-4 h-4 text-primary" />

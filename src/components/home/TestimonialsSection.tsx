@@ -40,7 +40,7 @@ const TestimonialsSection = () => (
           Loved by <span className="text-teal-500">Brands & Creators</span>
         </h2>
         <p className="text-gray-500 mt-4 max-w-xl mx-auto text-lg leading-relaxed">
-          Don't take our word for it — hear from the people who use InfluFlow every day.
+          Don't take our word for it, hear from the people who use InfluFlow every day.
         </p>
       </motion.div>
 

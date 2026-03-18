@@ -12,21 +12,21 @@ const features = [
   {
     icon: Users,
     title: "Seamless Collaboration",
-    description: "Manage your entire influencer relationship — from outreach to content approval — in one unified workspace.",
+    description: "Manage your entire influencer relationship from outreach to content approval in one unified workspace.",
     color: "text-blue-500",
     bg: "bg-blue-50",
   },
   {
     icon: BarChart3,
     title: "Real-Time Analytics",
-    description: "Track campaign performance with live dashboards. Views, engagement, ROI — all at your fingertips.",
+    description: "Track campaign performance with live dashboards. Views, engagement, ROI all at your fingertips.",
     color: "text-violet-500",
     bg: "bg-violet-50",
   },
   {
     icon: Shield,
     title: "Verified Profiles",
-    description: "Every influencer is vetted for authenticity. No fake followers, no inflated stats — just real reach.",
+    description: "Every influencer is vetted for authenticity. No fake followers, no inflated stats just real reach.",
     color: "text-emerald-500",
     bg: "bg-emerald-50",
   },
@@ -71,7 +71,7 @@ const FeaturesSection = () => (
           Everything You Need to <span className="text-teal-500">Win</span>
         </h2>
         <p className="text-gray-500 mt-4 max-w-2xl mx-auto text-lg leading-relaxed">
-          InfluFlow gives brands and creators the tools to discover, connect, and grow — all in one beautifully simple platform.
+          InfluFlow gives brands and creators the tools to discover, connect and grow all in one beautifully simple platform.
         </p>
       </motion.div>
 

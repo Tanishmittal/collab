@@ -1,3 +1,4 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
 import { Users, Zap, Plus, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,102 @@ interface DiscoverySectionProps {
   ownBrandId: string | null;
 }
 
+
+
+const LoadingSkeleton = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+    {Array.from({ length: 6 }).map((_, i) => (
+      <Skeleton key={i} className="h-72 rounded-xl" />
+    ))}
+  </div>
+);
+
+const EmptyInfluencerState = ({ 
+  influencersCount, 
+  onClearFilters 
+}: { 
+  influencersCount: number, 
+  onClearFilters: () => void 
+}) => (
+  <div className="text-center py-10">
+    <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
+      <Users size={40} className="text-primary" />
+    </div>
+    {influencersCount === 0 ? (
+      <>
+        <h3 className="font-display font-semibold text-xl text-foreground">No influencers yet</h3>
+        <p className="text-muted-foreground mt-2 max-w-md mx-auto">
+          Be the first creator on the platform! Register your profile and start getting discovered by brands.
+        </p>
+        <ListInfluencerModal
+          trigger={
+            <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
+              <Zap size={16} className="mr-2" /> Register as Influencer
+            </Button>
+          }
+        />
+      </>
+    ) : (
+      <>
+        <h3 className="font-display font-semibold text-xl text-foreground">No influencers found</h3>
+        <p className="text-muted-foreground mt-2">Try adjusting your filters</p>
+        <Button variant="outline" className="mt-4" onClick={onClearFilters}>
+          Clear Filters
+        </Button>
+      </>
+    )}
+  </div>
+);
+
+const EmptyCampaignState = ({ 
+  campaignsCount, 
+  ownBrandId, 
+  onClearFilters 
+}: { 
+  campaignsCount: number, 
+  ownBrandId: string | null, 
+  onClearFilters: () => void 
+}) => (
+  <div className="text-center py-20">
+    <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
+      <Plus size={40} className="text-primary" />
+    </div>
+    {campaignsCount === 0 ? (
+      <>
+        <h3 className="font-display font-semibold text-xl text-foreground">No campaigns yet</h3>
+        <p className="text-muted-foreground mt-2 max-w-md mx-auto">
+          Be the first brand to post a campaign and connect with local influencers.
+        </p>
+        {ownBrandId ? (
+          <CreateCampaignModal
+            trigger={
+              <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
+                <Plus size={16} className="mr-2" /> Post a Campaign
+              </Button>
+            }
+          />
+        ) : (
+          <JoinBrandModal
+            trigger={
+              <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
+                <Building2 className="mr-2 w-4 h-4" /> Join as Brand
+              </Button>
+            }
+          />
+        )}
+      </>
+    ) : (
+      <>
+        <h3 className="font-display font-semibold text-xl text-foreground">No campaigns found</h3>
+        <p className="text-muted-foreground mt-2">Try adjusting your filters</p>
+        <Button variant="outline" className="mt-4" onClick={onClearFilters}>
+          Clear Filters
+        </Button>
+      </>
+    )}
+  </div>
+);
+
 const DiscoverySection = ({
   searchQuery,
   setSearchQuery,
@@ -54,18 +151,30 @@ const DiscoverySection = ({
   ownInfluencerId,
   ownBrandId,
 }: DiscoverySectionProps) => {
-  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Optimized sticky classes for both Guest and Dashboard contexts
+  const stickyClasses = user
+    ? "sticky top-0 md:top-0 lg:top-0 z-30 bg-white/95 backdrop-blur-sm -mx-4 py-4 px-4 sm:mx-0 sm:px-0"
+    : "sticky top-14 md:top-16 lg:top-20 z-30 bg-white/95 backdrop-blur-sm py-4 -mx-4 px-4 sm:mx-0 sm:px-0";
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedCity("all");
+    setSelectedNiche("all");
+  };
 
   return (
     <motion.section
       id="discover"
-      className="container py-12 space-y-6"
+      className="container py-8 md:py-12 space-y-8 md:space-y-12"
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-100px" }}
       transition={{ duration: 0.6, ease: "easeOut" }}
     >
       <SearchFilters
+        className={stickyClasses}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         selectedCity={selectedCity}
@@ -82,11 +191,7 @@ const DiscoverySection = ({
       />
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-72 rounded-xl" />
-          ))}
-        </div>
+        <LoadingSkeleton />
       ) : activeTab === "influencers" ? (
         filteredInfluencers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -100,42 +205,10 @@ const DiscoverySection = ({
             ))}
           </div>
         ) : (
-          <div className="text-center py-20">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
-              <Users size={40} className="text-primary" />
-            </div>
-            {influencers.length === 0 ? (
-              <>
-                <h3 className="font-display font-semibold text-xl text-foreground">No influencers yet</h3>
-                <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-                  Be the first creator on the platform! Register your profile and start getting discovered by brands.
-                </p>
-                <ListInfluencerModal
-                  trigger={
-                    <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
-                      <Zap size={16} className="mr-2" /> Register as Influencer
-                    </Button>
-                  }
-                />
-              </>
-            ) : (
-              <>
-                <h3 className="font-display font-semibold text-xl text-foreground">No influencers found</h3>
-                <p className="text-muted-foreground mt-2">Try adjusting your filters</p>
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSelectedCity("all");
-                    setSelectedNiche("all");
-                  }}
-                >
-                  Clear Filters
-                </Button>
-              </>
-            )}
-          </div>
+          <EmptyInfluencerState 
+            influencersCount={influencers.length} 
+            onClearFilters={clearFilters} 
+          />
         )
       ) : filteredCampaigns.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -144,52 +217,11 @@ const DiscoverySection = ({
           ))}
         </div>
       ) : (
-        <div className="text-center py-20">
-          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
-            <Plus size={40} className="text-primary" />
-          </div>
-          {campaigns.length === 0 ? (
-            <>
-              <h3 className="font-display font-semibold text-xl text-foreground">No campaigns yet</h3>
-              <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-                Be the first brand to post a campaign and connect with local influencers.
-              </p>
-              {ownBrandId ? (
-                <CreateCampaignModal
-                  trigger={
-                    <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
-                      <Plus size={16} className="mr-2" /> Post a Campaign
-                    </Button>
-                  }
-                />
-              ) : (
-                <JoinBrandModal
-                  trigger={
-                    <Button className="mt-6 gradient-primary border-0 text-primary-foreground">
-                      <Building2 className="mr-2 w-4 h-4" /> Join as Brand
-                    </Button>
-                  }
-                />
-              )}
-            </>
-          ) : (
-            <>
-              <h3 className="font-display font-semibold text-xl text-foreground">No campaigns found</h3>
-              <p className="text-muted-foreground mt-2">Try adjusting your filters</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => {
-                  setSearchQuery("");
-                  setSelectedCity("all");
-                  setSelectedNiche("all");
-                }}
-              >
-                Clear Filters
-              </Button>
-            </>
-          )}
-        </div>
+        <EmptyCampaignState 
+          campaignsCount={campaigns.length} 
+          ownBrandId={ownBrandId} 
+          onClearFilters={clearFilters} 
+        />
       )}
     </motion.section>
   );

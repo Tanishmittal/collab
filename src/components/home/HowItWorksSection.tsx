@@ -47,7 +47,7 @@ const HowItWorksSection = () => (
           Four Simple Steps to <span className="text-teal-500">Success</span>
         </h2>
         <p className="text-gray-500 mt-4 max-w-2xl mx-auto text-lg leading-relaxed">
-          Whether you're a brand looking for creators or an influencer seeking opportunities — getting started takes minutes.
+          Whether you're a brand looking for creators or an influencer seeking opportunities, getting started takes minutes.
         </p>
       </motion.div>
 

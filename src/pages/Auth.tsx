@@ -36,7 +36,7 @@ const Auth = () => {
         redirectTo: `${window.location.origin}/onboarding-check`,
       },
     });
-    
+
     if (error) {
       toast({ title: "Google sign-in failed", description: error.message, variant: "destructive" });
       setLoading(false);
@@ -86,7 +86,7 @@ const Auth = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Hero Section — split layout */}
+      {/* Hero Section split layout */}
       <section className="relative min-h-[calc(100vh-4rem)] flex items-center overflow-hidden py-12 md:py-16">
         {/* Background decorations */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -114,7 +114,7 @@ const Auth = () => {
               </h1>
 
               <p className="text-lg text-muted-foreground max-w-lg mx-auto lg:mx-0 mb-8">
-                Connect with Instagram, YouTube, and TikTok influencers. Launch campaigns, manage collaborations, and grow your brand — all in one place.
+                Connect with Instagram, YouTube, and Twitter influencers. Launch campaigns, manage collaborations, and grow your brand all in one place.
               </p>
 
               {/* Stats bar */}
@@ -132,7 +132,7 @@ const Auth = () => {
 
               {/* Trust badges */}
               <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3">
-                {["Instagram", "YouTube", "TikTok", "Twitter"].map((platform) => (
+                {["Instagram", "YouTube", "Twitter"].map((platform) => (
                   <span
                     key={platform}
                     className="px-3 py-1.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border"

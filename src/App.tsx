@@ -2,12 +2,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
-import InfluencerProfile from "./pages/InfluencerProfile";
+import UnifiedProfile from "./pages/UnifiedProfile";
 import RegisterInfluencer from "./pages/RegisterInfluencer";
 import RegisterBrand from "./pages/RegisterBrand";
 import EditInfluencerProfile from "./pages/EditInfluencerProfile";
@@ -17,33 +18,57 @@ import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import OnboardingCheck from "./pages/OnboardingCheck";
 import NotFound from "./pages/NotFound";
-import ProfileHub from "./pages/ProfileHub";
 import Settings from "./pages/Settings";
 import MobileNav from "@/components/MobileNav";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 
 const queryClient = new QueryClient();
 
+const HomeWrapper = () => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) {
+    return (
+      <DashboardLayout>
+        <Index />
+      </DashboardLayout>
+    );
+  }
+  return <Index />;
+};
+
+const ProfileWrapper = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) {
+    return <DashboardLayout>{children}</DashboardLayout>;
+  }
+  return <>{children}</>;
+};
+
 const AppRoutes = () => {
   usePushNotifications();
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/" element={<Index />} />
-      <Route path="/influencer/:id" element={<InfluencerProfile />} />
-      <Route path="/campaign/:id" element={<CampaignDetail />} />
+      <Route path="/" element={<HomeWrapper />} />
+      <Route path="/influencer/:id" element={<ProfileWrapper><UnifiedProfile /></ProfileWrapper>} />
+      <Route path="/brand/:id" element={<ProfileWrapper><UnifiedProfile /></ProfileWrapper>} />
+      <Route path="/campaign/:id" element={<ProfileWrapper><CampaignDetail /></ProfileWrapper>} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/onboarding-check" element={<ProtectedRoute><OnboardingCheck /></ProtectedRoute>} />
       <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
 
-      {/* Protected routes */}
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/edit-profile" element={<ProtectedRoute><EditInfluencerProfile /></ProtectedRoute>} />
-      <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
-      <Route path="/register" element={<ProtectedRoute><RegisterInfluencer /></ProtectedRoute>} />
-      <Route path="/register-brand" element={<ProtectedRoute><RegisterBrand /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><ProfileHub /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      {/* Protected routes wrapped in DashboardLayout */}
+      <Route element={<ProtectedRoute variant="layout"><DashboardLayout><Outlet /></DashboardLayout></ProtectedRoute>}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/edit-profile" element={<EditInfluencerProfile />} />
+        <Route path="/messages" element={<Messages />} />
+        <Route path="/register" element={<RegisterInfluencer />} />
+        <Route path="/register-brand" element={<RegisterBrand />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+
 
       <Route path="*" element={<NotFound />} />
     </Routes>
