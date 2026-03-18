@@ -11,6 +11,7 @@ const MobileNav = () => {
   const { user, influencerId, brandId } = useAuth();
 
   const navItems = user ? [
+    { label: "Home", icon: Home, path: "/" },
     { label: "Dashboard", icon: BarChart3, path: "/dashboard" },
     { label: "Messages", icon: MessageSquare, path: "/messages" },
     { 
@@ -28,12 +29,13 @@ const MobileNav = () => {
   if (navItems.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 left-0 right-0 z-[25] flex justify-center px-4 md:hidden pb-[var(--safe-area-bottom)]">
+    <div className="fixed bottom-0 left-0 right-0 z-[25] md:hidden pb-[var(--safe-area-bottom)]">
       <nav 
-        className="flex items-center justify-between gap-1 px-2 h-16 bg-white/95 backdrop-blur-md border border-border/40 shadow-xl rounded-full overflow-hidden"
+        className="flex items-center justify-between gap-1 px-2 h-16 bg-white/95 backdrop-blur-md border border-border/40 shadow-xl rounded-t-2xl overflow-hidden w-full"
       >
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path && item.label !== "Profile" && item.label !== "Join"; 
+          const isActive = (location.pathname === item.path && item.label !== "Profile" && item.label !== "Join") ||
+                          (item.label === "Home" && (location.pathname === "/" || location.pathname === "/index"));
           // Special case for profile to avoid double active state if dashboard is also active
           const isProfileActive = (item.label === "Profile" || item.label === "Join") && location.pathname === "/dashboard";
           const active = isActive || isProfileActive;

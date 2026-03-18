@@ -225,64 +225,6 @@ const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boo
     <div>
       <div className="container px-4 pb-6 pt-4 md:px-6">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-          <div className="space-y-5 lg:col-span-7">
-            <section className="rounded-2xl border border-slate-200/60 bg-slate-50/70 p-4">
-              <h2 className="text-base font-semibold text-slate-900">Creator Overview</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                Browse verified socials, featured work, and client feedback to get a quick sense of this creator's style and fit.
-              </p>
-            </section>
-
-            {influencer.is_verified && (influencer.instagram_url || influencer.youtube_url || influencer.twitter_url) && (
-              <section>
-              <h2 className="mb-3 text-base font-semibold text-slate-900">Verified Socials</h2>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {influencer.instagram_url && (
-                    <SocialLink href={influencer.instagram_url} label="Instagram" icon={<Instagram size={18} className="text-pink-500" />} />
-                  )}
-                  {influencer.youtube_url && (
-                    <SocialLink href={influencer.youtube_url} label="YouTube" icon={<Youtube size={18} className="text-red-500" />} />
-                  )}
-                  {influencer.twitter_url && (
-                    <SocialLink href={influencer.twitter_url} label="X (Twitter)" icon={<Twitter size={18} className="text-sky-500" />} />
-                  )}
-                </div>
-              </section>
-            )}
-
-            <Tabs defaultValue="portfolio" className="w-full">
-              <TabsList className="mb-4 h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 whitespace-nowrap">
-                <TabsTrigger value="portfolio" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
-                  Work Portfolio ({portfolio.length})
-                </TabsTrigger>
-                <TabsTrigger value="reviews" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
-                  Client Reviews ({reviews.length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="portfolio" className="m-0">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {portfolio.map((item) => (
-                    <div key={item.id} className="group cursor-pointer">
-                      <div className="relative mb-2 aspect-[16/10] overflow-hidden rounded-xl border border-slate-200/60 bg-slate-100">
-                        <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                        <div className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                          {contentTypeIcon(item.type)}
-                        </div>
-                      </div>
-                      <h4 className="text-sm font-semibold text-slate-900 transition-colors group-hover:text-teal-600">{item.title}</h4>
-                      <p className="mt-0.5 text-[11px] uppercase tracking-wide text-slate-400">{item.platform}</p>
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="reviews" className="m-0">
-                <ReviewList reviews={reviews} />
-              </TabsContent>
-            </Tabs>
-          </div>
-
           <div className="space-y-4 lg:col-span-5">
             <div className="space-y-4 lg:sticky lg:top-24">
               <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
@@ -371,6 +313,64 @@ const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boo
               </div>
             )}
           </div>
+
+          <div className="space-y-5 lg:col-span-7">
+            <section className="rounded-2xl border border-slate-200/60 bg-slate-50/70 p-4">
+              <h2 className="text-base font-semibold text-slate-900">Creator Overview</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Browse verified socials, featured work, and client feedback to get a quick sense of this creator's style and fit.
+              </p>
+            </section>
+
+            {influencer.is_verified && (influencer.instagram_url || influencer.youtube_url || influencer.twitter_url) && (
+              <section>
+              <h2 className="mb-3 text-base font-semibold text-slate-900">Verified Socials</h2>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {influencer.instagram_url && (
+                    <SocialLink href={influencer.instagram_url} label="Instagram" icon={<Instagram size={18} className="text-pink-500" />} />
+                  )}
+                  {influencer.youtube_url && (
+                    <SocialLink href={influencer.youtube_url} label="YouTube" icon={<Youtube size={18} className="text-red-500" />} />
+                  )}
+                  {influencer.twitter_url && (
+                    <SocialLink href={influencer.twitter_url} label="X (Twitter)" icon={<Twitter size={18} className="text-sky-500" />} />
+                  )}
+                </div>
+              </section>
+            )}
+
+            <Tabs defaultValue="portfolio" className="w-full">
+              <TabsList className="mb-4 h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 whitespace-nowrap">
+                <TabsTrigger value="portfolio" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
+                  Work Portfolio ({portfolio.length})
+                </TabsTrigger>
+                <TabsTrigger value="reviews" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
+                  Client Reviews ({reviews.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="portfolio" className="m-0">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {portfolio.map((item) => (
+                    <div key={item.id} className="group cursor-pointer">
+                      <div className="relative mb-2 aspect-[16/10] overflow-hidden rounded-xl border border-slate-200/60 bg-slate-100">
+                        <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        <div className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                          {contentTypeIcon(item.type)}
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-900 transition-colors group-hover:text-teal-600">{item.title}</h4>
+                      <p className="mt-0.5 text-[11px] uppercase tracking-wide text-slate-400">{item.platform}</p>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="reviews" className="m-0">
+                <ReviewList reviews={reviews} />
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </div>
     </div>
@@ -443,6 +443,39 @@ const BrandView = ({ brand, campaigns, isOwner }: { brand: any; campaigns: any[]
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          <div className="space-y-4 lg:col-span-4">
+            <div className="space-y-4 lg:sticky lg:top-24">
+              <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Brand Overview</h3>
+                <div className="space-y-3">
+                  <ContactRow icon={<Building2 size={16} />} value={brand.industry || brand.business_type} />
+                  <ContactRow icon={<Users size={16} />} value={`${brand.campaigns_per_month || 0} campaigns / month`} />
+                  <ContactRow icon={<Target size={16} />} value={`${targetNiches.length} creator niches targeted`} />
+                  <ContactRow icon={<MapPin size={16} />} value={`${targetCities.length} markets in focus`} />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
+                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Contact Info</h3>
+                <div className="mb-5 space-y-3">
+                  <ContactRow icon={<Mail size={16} />} value={brand.email} />
+                  {brand.phone && <ContactRow icon={<Phone size={16} />} value={brand.phone} />}
+                  {brand.contact_name && <ContactRow icon={<Users size={16} />} value={brand.contact_name} />}
+                </div>
+
+                {isOwner ? (
+                  <Button className="h-10 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800" onClick={() => navigate("/edit-brand-profile")}>
+                    Edit Brand Profile
+                  </Button>
+                ) : (
+                  <Button className="h-10 w-full rounded-xl bg-teal-600 font-semibold text-white hover:bg-teal-700">
+                    Contact Brand
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-5 lg:col-span-8">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -551,39 +584,6 @@ const BrandView = ({ brand, campaigns, isOwner }: { brand: any; campaigns: any[]
               </div>
             </section>
 
-          </div>
-
-          <div className="space-y-4 lg:col-span-4">
-            <div className="space-y-4 lg:sticky lg:top-24">
-              <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
-                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Brand Overview</h3>
-                <div className="space-y-3">
-                  <ContactRow icon={<Building2 size={16} />} value={brand.industry || brand.business_type} />
-                  <ContactRow icon={<Users size={16} />} value={`${brand.campaigns_per_month || 0} campaigns / month`} />
-                  <ContactRow icon={<Target size={16} />} value={`${targetNiches.length} creator niches targeted`} />
-                  <ContactRow icon={<MapPin size={16} />} value={`${targetCities.length} markets in focus`} />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
-                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Contact Info</h3>
-                <div className="mb-5 space-y-3">
-                  <ContactRow icon={<Mail size={16} />} value={brand.email} />
-                  {brand.phone && <ContactRow icon={<Phone size={16} />} value={brand.phone} />}
-                  {brand.contact_name && <ContactRow icon={<Users size={16} />} value={brand.contact_name} />}
-                </div>
-
-                {isOwner ? (
-                  <Button className="h-10 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800" onClick={() => navigate("/edit-brand-profile")}>
-                    Edit Brand Profile
-                  </Button>
-                ) : (
-                  <Button className="h-10 w-full rounded-xl bg-teal-600 font-semibold text-white hover:bg-teal-700">
-                    Contact Brand
-                  </Button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>
