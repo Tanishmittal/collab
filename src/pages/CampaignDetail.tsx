@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -10,7 +10,7 @@ import BookingModal from "@/components/BookingModal";
 import ReviewForm from "@/components/ReviewForm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -18,6 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -56,6 +57,11 @@ interface ApplicationRow {
     rating: number | null;
   } | null;
 }
+
+type BookingStatusRow = Pick<
+  Database["public"]["Tables"]["bookings"]["Row"],
+  "application_id" | "status"
+>;
 
 const isCampaignExpired = (campaign: CampaignRow) => {
   if (!campaign.expires_at) return false;
@@ -140,7 +146,7 @@ const maybeCompleteCampaign = async (campaignId: string) => {
       .eq("campaign_id", campaignId)
       .eq("status", "accepted"),
     supabase
-      .from("bookings" as any)
+      .from("bookings")
       .select("application_id, status")
       .eq("campaign_id", campaignId),
   ]);
@@ -155,7 +161,8 @@ const maybeCompleteCampaign = async (campaignId: string) => {
   }
 
   const bookingStatusByApplication = new Map<string, string>();
-  (linkedBookings || []).forEach((booking: any) => {
+  const bookingRows = (linkedBookings ?? []) as BookingStatusRow[];
+  bookingRows.forEach((booking) => {
     if (booking.application_id) {
       bookingStatusByApplication.set(booking.application_id, booking.status);
     }
@@ -195,66 +202,52 @@ const CampaignDetail = () => {
 
   const isOwner = user && campaign && campaign.user_id === user.id;
 
-  useEffect(() => {
-    if (id) {
-      fetchCampaign();
-      if (user) {
-        checkExistingApplication();
-      }
-    }
-  }, [id, user]);
+  const fetchCampaign = useCallback(async () => {
+    if (!id) return;
 
-  useEffect(() => {
-    if (isOwner && id) fetchApplications();
-  }, [isOwner, id]);
-
-  useEffect(() => {
-    if (id) {
-      fetchBookingStatuses();
-    }
-  }, [id]);
-
-  const fetchCampaign = async () => {
     setLoading(true);
     const [{ data, error }, { count: totalApplications }, { count: acceptedApplications }] = await Promise.all([
       supabase
         .from("campaigns")
         .select("*")
-        .eq("id", id!)
+        .eq("id", id)
         .maybeSingle(),
       supabase
         .from("campaign_applications")
         .select("*", { count: "exact", head: true })
-        .eq("campaign_id", id!),
+        .eq("campaign_id", id),
       supabase
         .from("campaign_applications")
         .select("*", { count: "exact", head: true })
-        .eq("campaign_id", id!)
+        .eq("campaign_id", id)
         .eq("status", "accepted"),
     ]);
     if (!error && data) setCampaign(data as CampaignRow);
     setApplicationCount(totalApplications || 0);
     setAcceptedCount(acceptedApplications || 0);
     setLoading(false);
-  };
+  }, [id]);
 
-  const checkExistingApplication = async () => {
-    if (!user) return;
+  const checkExistingApplication = useCallback(async () => {
+    if (!user || !id) return;
+
     const { data } = await supabase
       .from("campaign_applications")
       .select("id, status")
-      .eq("campaign_id", id!)
+      .eq("campaign_id", id)
       .eq("user_id", user.id)
       .maybeSingle();
     setHasApplied(!!data);
     setMyApplication(data ? { id: data.id, status: data.status } : null);
-  };
+  }, [id, user]);
 
-  const fetchApplications = async () => {
+  const fetchApplications = useCallback(async () => {
+    if (!id) return;
+
     const { data } = await supabase
       .from("campaign_applications")
       .select("*, influencer_profiles(id, name, city, niche, followers, engagement_rate, rating)")
-      .eq("campaign_id", id!)
+      .eq("campaign_id", id)
       .order("created_at", { ascending: false });
     if (data) {
       const nextApplications = data as ApplicationRow[];
@@ -262,24 +255,43 @@ const CampaignDetail = () => {
       setApplicationCount(nextApplications.length);
       setAcceptedCount(nextApplications.filter((application) => application.status === "accepted").length);
     }
-  };
+  }, [id]);
 
-  const fetchBookingStatuses = async () => {
+  const fetchBookingStatuses = useCallback(async () => {
+    if (!id) return;
+
     const { data } = await supabase
-      .from("bookings" as any)
+      .from("bookings")
       .select("application_id, status")
-      .eq("campaign_id", id!);
+      .eq("campaign_id", id);
 
     if (!data) return;
 
     const next: Record<string, string> = {};
-    data.forEach((booking: any) => {
+    (data as BookingStatusRow[]).forEach((booking) => {
       if (booking.application_id) {
         next[booking.application_id] = booking.status;
       }
     });
     setBookingStatusByApplication(next);
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchCampaign();
+    if (user) {
+      checkExistingApplication();
+    }
+  }, [checkExistingApplication, fetchCampaign, user]);
+
+  useEffect(() => {
+    if (isOwner && id) {
+      fetchApplications();
+    }
+  }, [fetchApplications, id, isOwner]);
+
+  useEffect(() => {
+    fetchBookingStatuses();
+  }, [fetchBookingStatuses]);
 
   const handleApply = async () => {
     if (!user) {
@@ -289,7 +301,7 @@ const CampaignDetail = () => {
     }
     if (!influencerId) {
       toast({ title: "No influencer profile", description: "Please register as an influencer first.", variant: "destructive" });
-      navigate("/profile");
+      navigate("/register");
       return;
     }
     if (!campaign) return;

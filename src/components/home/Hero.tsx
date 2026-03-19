@@ -142,6 +142,14 @@ const Hero = () => {
     if (idx !== activeReelIndex) setActiveReelIndex(idx);
   };
 
+  const goToReel = (idx: number) => {
+    reelContainerRef.current?.scrollTo({
+      top: idx * (reelContainerRef.current?.offsetHeight || 0),
+      behavior: "smooth",
+    });
+    setActiveReelIndex(idx);
+  };
+
   return (
     <section className="relative overflow-hidden bg-[#050505] text-white container rounded-full md:rounded-[7vw]">
       <StarField />
@@ -191,8 +199,8 @@ const Hero = () => {
                 <div className="flex items-center gap-4 w-full sm:w-auto mt-2 sm:mt-0">
                   <div className="flex -space-x-3 shrink-0">
                     {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#050505] bg-gray-800 overflow-hidden relative z-10 transition-transform hover:z-20 hover:scale-110">
-                        <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="user" className="w-full h-full object-cover" />
+                    <div key={i} className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#050505] bg-gray-800 overflow-hidden relative z-10 transition-transform hover:z-20 hover:scale-110">
+                        <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="user" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       </div>
                     ))}
                   </div>
@@ -216,9 +224,16 @@ const Hero = () => {
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
                 {influencers.map((inf, idx) => (
-                  <div key={idx} className="h-full w-full snap-start relative flex items-center justify-center p-4 md:p-6">
+                    <div key={idx} className="h-full w-full snap-start relative flex items-center justify-center p-4 md:p-6">
                     <div className={`relative w-full h-full rounded-[1.5rem] md:rounded-[2rem] overflow-hidden group transition-all duration-700 ease-out ${activeReelIndex === idx ? "scale-100 opacity-100" : "scale-90 opacity-40 blur-sm"}`}>
-                      <img src={inf.img} alt={inf.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                      <img
+                        src={inf.img}
+                        alt={inf.name}
+                        loading={idx === 0 ? "eager" : "lazy"}
+                        fetchPriority={idx === 0 ? "high" : "low"}
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                      />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
 
                       <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
@@ -259,12 +274,20 @@ const Hero = () => {
                 {influencers.map((_, idx) => (
                   <button
                     key={idx}
-                    onClick={() => {
-                      reelContainerRef.current?.scrollTo({ top: idx * (reelContainerRef.current?.offsetHeight || 0), behavior: "smooth" });
-                      setActiveReelIndex(idx);
-                    }}
-                    className={`w-1 transition-all duration-300 rounded-full ${activeReelIndex === idx ? "h-6 md:h-8 bg-teal-500 shadow-[0_0_10px_#14b8a6]" : "h-1.5 md:h-2 bg-white/20 hover:bg-white/40"}`}
-                  />
+                    type="button"
+                    aria-label={`Go to creator slide ${idx + 1}`}
+                    aria-pressed={activeReelIndex === idx}
+                    onClick={() => goToReel(idx)}
+                    className="flex h-6 w-6 items-center justify-center rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
+                  >
+                    <span
+                      className={`block rounded-full transition-all duration-300 ${
+                        activeReelIndex === idx
+                          ? "h-4 w-2 bg-teal-500 shadow-[0_0_10px_#14b8a6]"
+                          : "h-2 w-2 bg-white/30 hover:bg-white/50"
+                      }`}
+                    />
+                  </button>
                 ))}
               </div>
 

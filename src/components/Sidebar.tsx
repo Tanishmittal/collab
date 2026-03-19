@@ -8,6 +8,18 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 
+type NavItem = {
+  label: string;
+  path: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  activePath?: string;
+};
+
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+};
+
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -18,7 +30,7 @@ const Sidebar = () => {
     navigate("/");
   };
 
-  const navGroups = [
+  const navGroups: NavGroup[] = [
     {
       label: "Primary",
       items: [{ label: "Discover", path: "/", icon: Search },
@@ -39,7 +51,7 @@ const Sidebar = () => {
         ...(brandId
           ? [{ label: "Create Campaign", path: "/create-campaign", activePath: "/create-campaign", icon: PlusSquare }]
           : []),
-      ].filter(Boolean) as any[]
+      ]
     },
     {
       label: "Account",
@@ -90,8 +102,7 @@ const Sidebar = () => {
                     )} />
                     <span className="flex-1">{item.label}</span>
                     {isActive && (
-                      <motion.div 
-                        layoutId="active-pill"
+                      <div
                         className="absolute left-0 w-1 h-6 bg-teal-500 rounded-r-full"
                       />
                     )}
@@ -137,11 +148,6 @@ const Sidebar = () => {
       </div>
     </aside>
   );
-};
-
-// Dummy motion component to avoid framer-motion dependency errors if not perfectly handled
-const motion = {
-  div: ({ children, className }: any) => <div className={className}>{children}</div>
 };
 
 export default Sidebar;

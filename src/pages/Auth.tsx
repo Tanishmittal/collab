@@ -54,7 +54,7 @@ const Auth = () => {
     if (error) {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Welcome back! 👋" });
+      toast({ title: "Welcome back!", description: "Checking your account setup now." });
       navigate("/onboarding-check");
     }
   };
@@ -75,8 +75,8 @@ const Auth = () => {
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
     } else {
       toast({
-        title: "Account created! 🎉",
-        description: "Check your email for a confirmation link, or continue to set up your profile.",
+        title: "Account created!",
+        description: "Check your email if confirmation is required. We'll route you to the right next step.",
       });
       navigate("/onboarding-check");
     }

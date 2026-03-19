@@ -1,23 +1,67 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import type { Campaign, Influencer } from "@/data/mockData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampaigns, useInfluencers } from "@/hooks/useQuery";
-import CTASection from "@/components/home/CTASection";
-import DiscoverySection from "@/components/home/DiscoverySection";
-import FeaturesSection from "@/components/home/FeaturesSection";
-import GuestInfluencerCarousel from "@/components/home/GuestInfluencerCarousel";
 import Hero from "@/components/home/Hero";
-import HowItWorksSection from "@/components/home/HowItWorksSection";
-import StatsSection from "@/components/home/StatsSection";
-import TestimonialsSection from "@/components/home/TestimonialsSection";
+import type { Database } from "@/integrations/supabase/types";
+
+const CTASection = lazy(() => import("@/components/home/CTASection"));
+const DiscoverySection = lazy(() => import("@/components/home/DiscoverySection"));
+const FeaturesSection = lazy(() => import("@/components/home/FeaturesSection"));
+const GuestInfluencerCarousel = lazy(() => import("@/components/home/GuestInfluencerCarousel"));
+const HowItWorksSection = lazy(() => import("@/components/home/HowItWorksSection"));
+const StatsSection = lazy(() => import("@/components/home/StatsSection"));
+const TestimonialsSection = lazy(() => import("@/components/home/TestimonialsSection"));
+
+type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
+type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
 
 const parseFollowers = (f: string) => {
   const num = parseFloat(f);
   if (f.includes("K")) return num * 1000;
   if (f.includes("M")) return num * 1000000;
   return num;
+};
+
+const SectionSkeleton = ({ className = "min-h-[320px]" }: { className?: string }) => (
+  <div className={`container ${className}`} aria-hidden="true" />
+);
+
+const DeferredSection = ({
+  children,
+  fallbackClassName,
+}: {
+  children: React.ReactNode;
+  fallbackClassName?: string;
+}) => {
+  const [shouldRender, setShouldRender] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldRender(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef}>
+      {shouldRender ? children : <SectionSkeleton className={fallbackClassName} />}
+    </div>
+  );
 };
 
 const Index = () => {
@@ -32,13 +76,17 @@ const Index = () => {
   const [influencerPage, setInfluencerPage] = useState(0);
   const [campaignPage, setCampaignPage] = useState(0);
   const pageSize = 20;
+  const isGuest = !authLoading && !user;
+  const influencerLimit = user ? pageSize : 8;
 
   const {
     data: influencersData = [],
     isLoading: influencersLoading,
   } = useInfluencers({
-    limit: pageSize,
-    offset: influencerPage * pageSize,
+    limit: influencerLimit,
+    offset: user ? influencerPage * pageSize : 0,
+  }, {
+    enabled: !authLoading,
   });
 
   const {
@@ -48,11 +96,13 @@ const Index = () => {
     limit: pageSize,
     offset: campaignPage * pageSize,
     onlyActive: true,
+  }, {
+    enabled: !!user,
   });
 
   const influencers = useMemo(
     () =>
-      (influencersData as any[]).map(
+      (influencersData as InfluencerProfileRow[]).map(
         (row) =>
           ({
             id: row.id,
@@ -78,7 +128,7 @@ const Index = () => {
 
   const campaigns = useMemo(
     () =>
-      (campaignsData as any[]).map(
+      (campaignsData as CampaignRow[]).map(
         (row) =>
           ({
             id: row.id,
@@ -163,44 +213,70 @@ const Index = () => {
     <div className="min-h-screen bg-white text-gray-900 selection:bg-teal-500/30">
       {(!user || window.innerWidth < 768) && <Navbar />}
 
-      {!authLoading && !user && <Hero />}
+      {isGuest && <Hero />}
 
       {user ? (
-        <DiscoverySection
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          selectedCity={selectedCity}
-          setSelectedCity={setSelectedCity}
-          selectedNiche={selectedNiche}
-          setSelectedNiche={setSelectedNiche}
-          sortBy={sortBy}
-          setSortBy={setSortBy}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          verifiedOnly={verifiedOnly}
-          setVerifiedOnly={setVerifiedOnly}
-          loading={influencersLoading || campaignsLoading}
-          influencers={influencers}
-          campaigns={campaigns}
-          filteredInfluencers={filteredInfluencers}
-          filteredCampaigns={filteredCampaigns}
-          ownInfluencerId={ownInfluencerId}
-          ownBrandId={ownBrandId}
-        />
+        <Suspense fallback={<SectionSkeleton className="min-h-[640px]" />}>
+          <DiscoverySection
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            selectedCity={selectedCity}
+            setSelectedCity={setSelectedCity}
+            selectedNiche={selectedNiche}
+            setSelectedNiche={setSelectedNiche}
+            sortBy={sortBy}
+            setSortBy={setSortBy}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            verifiedOnly={verifiedOnly}
+            setVerifiedOnly={setVerifiedOnly}
+            loading={influencersLoading || campaignsLoading}
+            influencers={influencers}
+            campaigns={campaigns}
+            filteredInfluencers={filteredInfluencers}
+            filteredCampaigns={filteredCampaigns}
+            ownInfluencerId={ownInfluencerId}
+            ownBrandId={ownBrandId}
+          />
+        </Suspense>
       ) : (
-        <GuestInfluencerCarousel influencers={influencers} loading={influencersLoading} />
+        <Suspense fallback={<SectionSkeleton className="min-h-[520px]" />}>
+          <GuestInfluencerCarousel influencers={influencers} loading={influencersLoading} />
+        </Suspense>
       )}
 
-      {!authLoading && !user && (
+      {isGuest && (
         <>
-          <FeaturesSection />
-          <HowItWorksSection />
-          <StatsSection />
-          <TestimonialsSection />
+          <DeferredSection fallbackClassName="min-h-[420px]">
+            <Suspense fallback={<SectionSkeleton className="min-h-[420px]" />}>
+              <FeaturesSection />
+            </Suspense>
+          </DeferredSection>
+          <DeferredSection fallbackClassName="min-h-[380px]">
+            <Suspense fallback={<SectionSkeleton className="min-h-[380px]" />}>
+              <HowItWorksSection />
+            </Suspense>
+          </DeferredSection>
+          <DeferredSection fallbackClassName="min-h-[280px]">
+            <Suspense fallback={<SectionSkeleton className="min-h-[280px]" />}>
+              <StatsSection />
+            </Suspense>
+          </DeferredSection>
+          <DeferredSection fallbackClassName="min-h-[420px]">
+            <Suspense fallback={<SectionSkeleton className="min-h-[420px]" />}>
+              <TestimonialsSection />
+            </Suspense>
+          </DeferredSection>
         </>
       )}
 
-      {!authLoading && !user && <CTASection />}
+      {isGuest && (
+        <DeferredSection fallbackClassName="min-h-[240px]">
+          <Suspense fallback={<SectionSkeleton className="min-h-[240px]" />}>
+            <CTASection />
+          </Suspense>
+        </DeferredSection>
+      )}
     </div>
   );
 };

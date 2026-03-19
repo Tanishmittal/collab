@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { MessageSquare, ChevronRight } from "lucide-react";
+import { MessageSquare, ChevronRight, ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import ChatThread from "@/components/ChatThread";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface Conversation {
@@ -21,20 +22,17 @@ interface Conversation {
   unreadCount: number;
 }
 
+type MessageRow = Database["public"]["Tables"]["messages"]["Row"];
+
 const Messages = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
-  const subscriptionRef = useRef<any>(null);
+  const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
-    if (user) fetchConversations();
-  }, [user, authLoading]);
-
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!user) {
       setLoading(false);
       return;
@@ -51,13 +49,13 @@ const Messages = () => {
 
       if (!messages || messages.length === 0) {
         setConversations([]);
+        setSelectedConvo(null);
         setLoading(false);
-        setupRealtimeSubscription();
         return;
       }
 
       // Group by application_id
-      const grouped = new Map<string, any[]>();
+      const grouped = new Map<string, MessageRow[]>();
       for (const msg of messages) {
         const key = msg.application_id;
         if (!grouped.has(key)) grouped.set(key, []);
@@ -68,7 +66,7 @@ const Messages = () => {
       for (const [convoId, msgs] of grouped) {
         const latest = msgs[0]; // already sorted desc
         const otherUserId = latest.sender_id === user.id ? latest.receiver_id : latest.sender_id;
-        const unreadCount = msgs.filter((m: any) => m.receiver_id === user.id && !m.read).length;
+        const unreadCount = msgs.filter((m) => m.receiver_id === user.id && !m.read).length;
 
         // Get other user's name
         const { data: profile } = await supabase
@@ -97,16 +95,29 @@ const Messages = () => {
       }
 
       setConversations(convos);
-      setupRealtimeSubscription();
+      setSelectedConvo((current) => {
+        if (convos.length === 0) return null;
+        if (current) {
+          return convos.find((convo) => convo.applicationId === current.applicationId) || convos[0];
+        }
+        return convos[0];
+      });
     } catch (error) {
       console.error("Error fetching conversations:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (!authLoading && !user) navigate("/auth");
+    if (user) {
+      void fetchConversations();
+    }
+  }, [user, authLoading, navigate, fetchConversations]);
 
   // Setup realtime subscription for messages
-  const setupRealtimeSubscription = () => {
+  useEffect(() => {
     if (!user) return;
 
     // Cancel previous subscription
@@ -123,17 +134,21 @@ const Messages = () => {
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `sender_id=eq.${user.id}|receiver_id=eq.${user.id}`,
         },
         async (payload) => {
+          const message = payload.new as MessageRow;
+          if (message.sender_id !== user.id && message.receiver_id !== user.id) {
+            return;
+          }
+
           // New message arrived - refetch to update UI
-          fetchConversations();
+          void fetchConversations();
         }
       )
       .subscribe();
 
     subscriptionRef.current = channel;
-  };
+  }, [fetchConversations, user]);
 
   // Cleanup subscription on unmount
   useEffect(() => {
@@ -163,9 +178,9 @@ const Messages = () => {
       <div className="container max-w-4xl py-8">
         <h1 className="font-display font-bold text-2xl text-foreground mb-6">Messages</h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Conversation list */}
-          <div className="lg:col-span-2 space-y-2">
+          <div className={`${selectedConvo ? "hidden lg:block" : "block"} lg:col-span-2 space-y-2`}>
             {conversations.length === 0 ? (
               <Card className="glass-card">
                 <CardContent className="p-8 text-center">
@@ -218,14 +233,24 @@ const Messages = () => {
           </div>
 
           {/* Chat area */}
-          <div className="lg:col-span-3">
+          <div className={`${selectedConvo ? "block" : "hidden lg:block"} lg:col-span-3`}>
             {selectedConvo ? (
-              <ChatThread
-                applicationId={selectedConvo.applicationId}
-                campaignId={selectedConvo.campaignId}
-                otherUserId={selectedConvo.otherUserId}
-                otherUserName={selectedConvo.otherUserName}
-              />
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedConvo(null)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:hidden"
+                >
+                  <ArrowLeft size={16} />
+                  Back to conversations
+                </button>
+                <ChatThread
+                  applicationId={selectedConvo.applicationId}
+                  campaignId={selectedConvo.campaignId}
+                  otherUserId={selectedConvo.otherUserId}
+                  otherUserName={selectedConvo.otherUserName}
+                />
+              </div>
             ) : (
               <Card className="glass-card h-[350px] flex items-center justify-center">
                 <CardContent className="text-center">

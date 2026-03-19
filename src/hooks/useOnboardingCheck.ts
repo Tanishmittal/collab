@@ -18,7 +18,7 @@ export const useOnboardingCheck = () => {
     }
     const onboardingTimeout = setTimeout(() => {
       console.warn("[useOnboardingCheck] Timeout hit!");
-      setStatus("complete");
+      setStatus("needs-onboarding");
     }, 5000);
 
     const check = async () => {
@@ -46,7 +46,7 @@ export const useOnboardingCheck = () => {
         setStatus(influencer || brand ? "complete" : "needs-onboarding");
       } catch (error) {
         console.error("[useOnboardingCheck] Exception:", error);
-        setStatus("complete");
+        setStatus("needs-onboarding");
       } finally {
         clearTimeout(onboardingTimeout);
       }

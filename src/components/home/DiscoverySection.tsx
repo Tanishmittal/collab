@@ -147,6 +147,7 @@ const DiscoverySection = ({
   ownBrandId,
 }: DiscoverySectionProps) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const filterWrapperClasses = user
     ? "sticky top-0 z-30 -mx-4 border-b border-slate-200/70 bg-white/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:px-0 sm:py-4"

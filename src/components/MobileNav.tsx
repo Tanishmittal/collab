@@ -1,30 +1,36 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, Search, MessageSquare, BarChart3, User, Zap, Star } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Home, Search, MessageSquare, BarChart3, User, Zap, Star, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+
+type NavItem = {
+  label: string;
+  icon: LucideIcon;
+  path: string;
+  isAnchor?: boolean;
+};
 
 const MobileNav = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, influencerId, brandId } = useAuth();
 
-  const navItems = user ? [
-    { label: "Home", icon: Home, path: "/" },
-    { label: "Dashboard", icon: BarChart3, path: "/dashboard" },
-    { label: "Messages", icon: MessageSquare, path: "/messages" },
-    { 
-      label: influencerId || brandId ? "Profile" : "Join", 
-      icon: User, 
-      path: influencerId ? `/influencer/${influencerId}` : (brandId ? `/brand/${brandId}` : "/onboarding")
-    }
-  ] : [
-    { label: "Discover", icon: Search, path: "#discover", isAnchor: true },
-    { label: "Features", icon: Zap, path: "#features", isAnchor: true },
-    { label: "How", icon: Home, path: "#how-it-works", isAnchor: true },
-    { label: "Reviews", icon: Star, path: "#testimonials", isAnchor: true }
-  ];
+  const navItems: NavItem[] = user
+    ? [
+        { label: "Home", icon: Home, path: "/" },
+        { label: "Dashboard", icon: BarChart3, path: "/dashboard" },
+        { label: "Messages", icon: MessageSquare, path: "/messages" },
+        {
+          label: influencerId || brandId ? "Profile" : "Join",
+          icon: User,
+          path: influencerId ? `/influencer/${influencerId}` : brandId ? `/brand/${brandId}` : "/onboarding",
+        },
+      ]
+    : [
+        { label: "Discover", icon: Search, path: "#discover", isAnchor: true },
+        { label: "Features", icon: Zap, path: "#features", isAnchor: true },
+        { label: "How", icon: Home, path: "#how-it-works", isAnchor: true },
+        { label: "Reviews", icon: Star, path: "#testimonials", isAnchor: true },
+      ];
 
   if (navItems.length === 0) return null;
 
@@ -34,11 +40,10 @@ const MobileNav = () => {
         className="flex items-center justify-between gap-1 px-2 h-16 bg-white/95 backdrop-blur-md border border-border/40 shadow-xl rounded-t-2xl overflow-hidden w-full"
       >
         {navItems.map((item) => {
-          const isActive = (location.pathname === item.path && item.label !== "Profile" && item.label !== "Join") ||
-                          (item.label === "Home" && (location.pathname === "/" || location.pathname === "/index"));
-          // Special case for profile to avoid double active state if dashboard is also active
-          const isProfileActive = (item.label === "Profile" || item.label === "Join") && location.pathname === "/dashboard";
-          const active = isActive || isProfileActive;
+          const active = item.isAnchor
+            ? location.pathname === "/" && item.label === "Discover"
+            : (item.label === "Home" && (location.pathname === "/" || location.pathname === "/index")) ||
+              location.pathname === item.path;
 
           const content = (
             <div className={cn(
@@ -64,11 +69,11 @@ const MobileNav = () => {
             </div>
           );
 
-          if ((item as any).isAnchor) {
+          if (item.isAnchor) {
             return (
               <a
                 key={item.label + item.path}
-                href={item.path}
+                href={location.pathname === "/" ? item.path : `/${item.path}`}
                 className="outline-none"
               >
                 {content}

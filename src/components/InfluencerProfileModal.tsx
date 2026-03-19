@@ -2,10 +2,22 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Users, Star, Video, Image as ImageIcon, Store } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { Database } from "@/integrations/supabase/types";
+
+type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
+type InfluencerProfilePreview = Pick<
+  InfluencerProfileRow,
+  "name" | "city" | "niche" | "followers" | "engagement_rate" | "rating"
+> &
+  Partial<
+    Pick<
+      InfluencerProfileRow,
+      "avatar_url" | "is_verified" | "bio" | "price_reel" | "price_story" | "price_visit"
+    >
+  >;
 
 interface InfluencerProfileModalProps {
-  profile: any;
+  profile: InfluencerProfilePreview | null | undefined;
   children: React.ReactNode;
 }
 

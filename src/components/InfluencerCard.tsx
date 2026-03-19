@@ -59,6 +59,9 @@ const InfluencerCard = ({
           <img
             src={influencer.avatar}
             alt={influencer.name}
+            loading="lazy"
+            decoding="async"
+            sizes="(min-width: 1280px) 340px, (min-width: 1024px) 25vw, (min-width: 768px) 50vw, 100vw"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
           />
         )}
