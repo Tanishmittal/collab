@@ -211,7 +211,7 @@ const DiscoverySection = ({
   return (
     <>
       <div className="sticky top-14 z-40 border-b border-slate-200/70 bg-white md:top-0">
-        <div className="container px-4 py-3 sm:px-0 sm:py-4">
+        <div className="container px-4 py-3 sm:px-4 sm:py-4 lg:px-6">
           <SearchFilters
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}

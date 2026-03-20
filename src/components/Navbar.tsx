@@ -23,6 +23,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
   const navigate = useNavigate();
   const { user, loading, influencerId, brandId, signOut } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
+  const isAuthPage = location.pathname === "/auth";
 
   const handleSignOut = async () => {
     await signOut();
