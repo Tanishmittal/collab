@@ -1,8 +1,9 @@
 import { ReactNode } from "react";
 import Sidebar from "./Sidebar";
-import { Bell, Search } from "lucide-react";
-import { useLocation, Link } from "react-router-dom";
+import { Bell } from "lucide-react";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNotifications } from "@/hooks/useNotifications";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -10,26 +11,29 @@ interface DashboardLayoutProps {
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, influencerId, brandId } = useAuth();
+  const { unreadCount } = useNotifications(user?.id);
 
   // Helper to get title from path
   const getPageTitle = (path: string) => {
     if (path === "/") return "Discover Creators";
     if (path.startsWith("/dashboard")) return "Dashboard Overview";
     if (path.startsWith("/messages")) return "Inbox";
+    if (path.startsWith("/notifications")) return "Notifications";
     if (path.startsWith("/settings")) return "Settings";
     if (path.startsWith("/influencer")) return "Influencer Profile";
     if (path.startsWith("/brand")) return "Brand Workspace";
-    return "InfluFlow";
+    return "Influgal";
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Desktop Sidebar */}
       <Sidebar />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex h-screen min-w-0 flex-1 flex-col overflow-x-hidden">
         {/* TopBar (Desktop Only) */}
         <header className="sticky top-0 z-30 hidden h-20 items-center justify-between border-b border-slate-200 bg-white px-8 md:flex">
           <div>
@@ -40,20 +44,18 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           </div>
 
           <div className="flex items-center gap-6">
-            <div className="group relative">
-              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                <Search size={16} className="text-slate-400 transition-colors group-focus-within:text-teal-500" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search anything..."
-                className="w-64 rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm transition-all focus:border-teal-200 focus:bg-white focus:ring-2 focus:ring-teal-500/10"
-              />
-            </div>
-
-            <button className="group relative rounded-xl p-2.5 text-slate-500 transition-colors hover:bg-slate-100">
+            <button
+              type="button"
+              aria-label={unreadCount > 0 ? `Open notifications, ${unreadCount} unread` : "Open notifications"}
+              onClick={() => navigate("/notifications")}
+              className="group relative rounded-xl p-2.5 text-slate-500 transition-colors hover:bg-slate-100"
+            >
               <Bell size={20} className="group-hover:text-teal-600 transition-colors" />
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+              {unreadCount > 0 && (
+                <span className="absolute right-1.5 top-1.5 min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </button>
 
             <div className="h-10 w-[1px] bg-slate-200" />
@@ -76,7 +78,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         </header>
 
         {/* Dynamic Page Content */}
-        <div className="flex-1 overflow-y-auto w-full">
+        <div className="flex-1 min-h-0 w-full overflow-y-auto">
           {children}
         </div>
       </main>

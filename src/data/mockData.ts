@@ -32,6 +32,11 @@ export interface Campaign {
   postedAt: string;
   deadline?: string;
   description: string;
+  targetPlatforms?: string[];
+  minFollowers?: number | null;
+  minEngagementRate?: number | null;
+  verifiedSocialsOnly?: boolean;
+  portfolioRequired?: boolean;
 }
 
 export const CITIES = ["Meerut", "Delhi", "Noida", "Mumbai", "Bangalore", "Pune", "Jaipur", "Lucknow"];

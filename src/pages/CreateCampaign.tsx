@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import BrandAvatar from "@/components/BrandAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCampaignForm } from "@/hooks/useCampaignForm";
 import CampaignForm from "@/components/CampaignForm";
 import { cn } from "@/lib/utils";
+import { goBackOr } from "@/lib/navigation";
 
 const steps = [
   { icon: Megaphone, label: "Identity" },
@@ -57,7 +59,6 @@ const CreateCampaign = () => {
     campaignDeliverables,
     canProceed,
     handleCreate,
-    logoOptions,
     deliverableOptions,
   } = useCampaignForm(() => navigate("/dashboard"));
 
@@ -84,7 +85,7 @@ const CreateCampaign = () => {
               Campaign creation is available only for brand accounts. Complete your brand profile, then launch campaigns from the dashboard.
             </p>
             <div className="mt-6 flex items-center justify-center gap-3">
-              <Button variant="outline" className="rounded-xl" onClick={() => navigate(-1)}>
+              <Button variant="outline" className="rounded-xl" onClick={() => goBackOr(navigate, "/dashboard")}>
                 Go Back
               </Button>
               <Button className="rounded-xl bg-slate-900 text-white hover:bg-slate-800" onClick={() => navigate("/register-brand")}>
@@ -147,14 +148,13 @@ const CreateCampaign = () => {
               includeEventVisit={includeEventVisit}
               setIncludeEventVisit={setIncludeEventVisit}
               campaignDeliverables={campaignDeliverables}
-              logoOptions={logoOptions}
               deliverableOptions={deliverableOptions}
             />
 
             <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
               <Button
                 variant="outline"
-                onClick={() => (step === 0 ? navigate(-1) : setStep((current) => current - 1))}
+                onClick={() => (step === 0 ? goBackOr(navigate, "/dashboard") : setStep((current) => current - 1))}
                 className="h-12 w-full rounded-2xl border-slate-200 px-8 font-bold sm:w-auto"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -203,9 +203,12 @@ const CreateCampaign = () => {
                 <div className="relative z-10 flex flex-grow flex-col p-6">
                   <div className="mb-5 flex items-start">
                     <div className="min-w-0 flex items-center gap-4">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-gray-100 bg-gray-50 text-3xl text-gray-900 shadow-sm">
-                        {form.brandLogo}
-                      </div>
+                      <BrandAvatar
+                        brand={form.brand || "Brand"}
+                        brandLogo={form.brandLogo}
+                        className="h-14 w-14 shrink-0 rounded-2xl shadow-sm"
+                        fallbackClassName="text-3xl"
+                      />
                       <div className="min-w-0">
                         <h4 className="truncate font-display text-xl font-black tracking-wide text-gray-900">
                           {form.brand || "Brand Name"}

@@ -13,6 +13,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useCampaignForm } from "@/hooks/useCampaignForm";
 import CampaignForm from "@/components/CampaignForm";
+import type { Database } from "@/integrations/supabase/types";
+
+type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
 
 const EditCampaign = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,7 +23,7 @@ const EditCampaign = () => {
   const { brandId } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [originalCampaign, setOriginalCampaign] = useState<any | null>(null);
+  const [originalCampaign, setOriginalCampaign] = useState<CampaignRow | null>(null);
 
   const {
     submitting,
@@ -34,7 +37,6 @@ const EditCampaign = () => {
     handleUpdate,
     loadCampaign,
     activitySummary,
-    logoOptions,
     deliverableOptions,
   } = useCampaignForm(() => navigate("/dashboard"), true, id);
 
@@ -120,7 +122,6 @@ const EditCampaign = () => {
             setIncludeEventVisit={setIncludeEventVisit}
             campaignDeliverables={campaignDeliverables}
             activitySummary={activitySummary}
-            logoOptions={logoOptions}
             deliverableOptions={deliverableOptions}
             onSubmit={handleSave}
             submitting={submitting}

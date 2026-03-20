@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Building2, Loader2, Save } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import AvatarUpload from "@/components/AvatarUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CITIES, NICHES } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+import { useManagedOptions } from "@/hooks/useManagedOptions";
+import { goBackOr } from "@/lib/navigation";
+
+type BrandProfileRow = Database["public"]["Tables"]["brand_profiles"]["Row"];
+type BrandProfileUpdate = Database["public"]["Tables"]["brand_profiles"]["Update"];
 
 const BUSINESS_TYPES = ["Restaurant / Cafe", "Retail / E-commerce", "Gym / Fitness", "Salon / Beauty", "Tech / SaaS", "Events / Entertainment", "Other"];
 const DELIVERABLE_OPTIONS = ["Reels", "Stories", "UGC", "Launch Events", "Store Visits", "Giveaways"];
@@ -22,10 +28,12 @@ const RESPONSE_TIME_OPTIONS = ["Usually within 24 hours", "Usually within 2-3 da
 const EditBrandProfile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, brandId } = useAuth();
+  const { cities, niches } = useManagedOptions();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   const [businessName, setBusinessName] = useState("");
   const [businessType, setBusinessType] = useState("");
@@ -65,23 +73,26 @@ const EditBrandProfile = () => {
         return;
       }
 
-      setProfileId(data.id);
-      setBusinessName(data.business_name);
-      setBusinessType(data.business_type);
-      setCity(data.city);
-      setBrandTagline((data as any).brand_tagline || "");
-      setDescription(data.description || "");
-      setContactName(data.contact_name);
-      setEmail(data.email);
-      setPhone(data.phone || "");
-      setWebsite(data.website || "");
-      setTargetNiches(data.target_niches || []);
-      setTargetCities(data.target_cities || []);
-      setDeliverablePreferences((data as any).deliverable_preferences || []);
-      setCampaignGoals((data as any).campaign_goals || []);
-      setCreatorRequirements((data as any).creator_requirements || "");
-      setCampaignsPerMonth(data.campaigns_per_month ? String(data.campaigns_per_month) : "");
-      setResponseTimeExpectation((data as any).response_time_expectation || "");
+      const profile = data as BrandProfileRow;
+
+      setProfileId(profile.id);
+      setLogoUrl(profile.logo_url || null);
+      setBusinessName(profile.business_name);
+      setBusinessType(profile.business_type);
+      setCity(profile.city);
+      setBrandTagline(profile.brand_tagline || "");
+      setDescription(profile.description || "");
+      setContactName(profile.contact_name);
+      setEmail(profile.email);
+      setPhone(profile.phone || "");
+      setWebsite(profile.website || "");
+      setTargetNiches(profile.target_niches || []);
+      setTargetCities(profile.target_cities || []);
+      setDeliverablePreferences(profile.deliverable_preferences || []);
+      setCampaignGoals(profile.campaign_goals || []);
+      setCreatorRequirements(profile.creator_requirements || "");
+      setCampaignsPerMonth(profile.campaigns_per_month ? String(profile.campaigns_per_month) : "");
+      setResponseTimeExpectation(profile.response_time_expectation || "");
       setLoading(false);
     };
 
@@ -119,26 +130,29 @@ const EditBrandProfile = () => {
     }
 
     setSaving(true);
+    const updatePayload: BrandProfileUpdate = {
+      business_name: businessName.trim().slice(0, 100),
+      logo_url: logoUrl || null,
+      business_type: businessType,
+      city,
+      brand_tagline: brandTagline.trim() || null,
+      description: description.trim().slice(0, 1000),
+      contact_name: contactName.trim().slice(0, 100),
+      email: email.trim(),
+      phone: phone.trim() || null,
+      website: website.trim() || null,
+      target_niches: targetNiches,
+      target_cities: targetCities,
+      deliverable_preferences: deliverablePreferences,
+      campaign_goals: campaignGoals,
+      creator_requirements: creatorRequirements.trim() || null,
+      campaigns_per_month: campaignsPerMonth ? parseInt(campaignsPerMonth, 10) : null,
+      response_time_expectation: responseTimeExpectation || null,
+    };
+
     const { error } = await supabase
       .from("brand_profiles")
-      .update({
-        business_name: businessName.trim().slice(0, 100),
-        business_type: businessType,
-        city,
-        brand_tagline: brandTagline.trim() || null,
-        description: description.trim().slice(0, 1000),
-        contact_name: contactName.trim().slice(0, 100),
-        email: email.trim(),
-        phone: phone.trim() || null,
-        website: website.trim() || null,
-        target_niches: targetNiches,
-        target_cities: targetCities,
-        deliverable_preferences: deliverablePreferences,
-        campaign_goals: campaignGoals,
-        creator_requirements: creatorRequirements.trim() || null,
-        campaigns_per_month: campaignsPerMonth ? parseInt(campaignsPerMonth, 10) : null,
-        response_time_expectation: responseTimeExpectation || null,
-      } as any)
+      .update(updatePayload)
       .eq("id", profileId);
 
     if (!error) {
@@ -174,15 +188,31 @@ const EditBrandProfile = () => {
       <Navbar variant="minimal" title="Edit Brand Profile" />
 
       <div className="container max-w-5xl py-6 pb-16 space-y-4">
-        <Button variant="ghost" size="sm" className="mb-1 px-0 text-muted-foreground hover:text-foreground" onClick={() => navigate(-1)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-1 hidden px-0 text-muted-foreground hover:text-foreground md:inline-flex"
+          onClick={() => goBackOr(navigate, brandId ? `/brand/${brandId}?tab=brand` : "/dashboard")}
+        >
           <ArrowLeft size={16} className="mr-1" /> Back
         </Button>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-              <Building2 size={24} />
-            </div>
+            {user ? (
+              <AvatarUpload
+                userId={user.id}
+                currentUrl={logoUrl}
+                initials={businessName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "B"}
+                onUploaded={(url) => setLogoUrl(url)}
+                onRemove={() => setLogoUrl(null)}
+                size="md"
+              />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <Building2 size={24} />
+              </div>
+            )}
             <div>
               <h1 className="font-display text-2xl font-bold text-foreground">Edit Brand Profile</h1>
               <p className="mt-1 text-sm text-muted-foreground">Update your public brand identity and creator-fit details.</p>
@@ -195,6 +225,9 @@ const EditBrandProfile = () => {
             <CardTitle className="font-display text-lg">Brand Identity</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Field label="Brand Avatar">
+              <p className="mt-1.5 text-sm text-muted-foreground">Your logo appears on the public brand profile and across campaign surfaces.</p>
+            </Field>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Business Name *">
                 <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} className="mt-1.5" />
@@ -211,7 +244,7 @@ const EditBrandProfile = () => {
               <Field label="City *">
                 <Select value={city} onValueChange={setCity}>
                   <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                  <SelectContent>{CITIES.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                  <SelectContent>{cities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
               <Field label="Tagline">
@@ -230,8 +263,8 @@ const EditBrandProfile = () => {
             <CardTitle className="font-display text-lg">Creator Fit</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <TagPicker label="Target Niches" options={NICHES} values={targetNiches} onToggle={(value) => toggleArrayItem("targetNiches", value)} />
-            <TagPicker label="Target Cities" options={CITIES} values={targetCities} onToggle={(value) => toggleArrayItem("targetCities", value)} />
+            <TagPicker label="Target Niches" options={niches} values={targetNiches} onToggle={(value) => toggleArrayItem("targetNiches", value)} />
+            <TagPicker label="Target Cities" options={cities} values={targetCities} onToggle={(value) => toggleArrayItem("targetCities", value)} />
             <TagPicker label="Deliverable Preferences" options={DELIVERABLE_OPTIONS} values={deliverablePreferences} onToggle={(value) => toggleArrayItem("deliverablePreferences", value)} />
             <TagPicker label="Campaign Goals" options={CAMPAIGN_GOALS} values={campaignGoals} onToggle={(value) => toggleArrayItem("campaignGoals", value)} />
 

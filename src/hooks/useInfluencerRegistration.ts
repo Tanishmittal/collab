@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -15,26 +16,26 @@ export interface InfluencerFormData {
   priceReel: string;
   priceStory: string;
   priceVisit: string;
-  // Modal-specific fields
-  avatarUrl?: string | null;
-  isVerified?: boolean;
-  instagramUrl?: string;
-  youtubeUrl?: string;
-  twitterUrl?: string;
-  verificationCode?: string;
+  avatarUrl: string | null;
+  isVerified: boolean;
+  instagramUrl: string;
+  youtubeUrl: string;
+  twitterUrl: string;
+  verificationCode: string;
 }
 
 export const PLATFORMS = [
   { id: "Instagram", icon: "Instagram", color: "from-pink-500 to-purple-500" },
   { id: "YouTube", icon: "Youtube", color: "from-red-500 to-red-600" },
   { id: "Twitter", icon: "Twitter", color: "from-sky-400 to-sky-500" },
-];
+] as const;
 
-export const useInfluencerRegistration = (
-  onSuccess?: () => void,
-  isModal: boolean = false
-) => {
+const createVerificationCode = () =>
+  Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join("").toUpperCase();
+
+export const useInfluencerRegistration = (onSuccess?: () => void) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, refreshProfiles } = useAuth();
   const [step, setStep] = useState(0);
@@ -48,58 +49,52 @@ export const useInfluencerRegistration = (
     followers: "",
     engagementRate: "",
     platforms: [],
-    priceReel: isModal ? "5000" : "",
-    priceStory: isModal ? "2000" : "",
-    priceVisit: isModal ? "8000" : "",
-    ...(isModal && {
-      avatarUrl: null,
-      isVerified: false,
-      instagramUrl: "",
-      youtubeUrl: "",
-      twitterUrl: "",
-      verificationCode: Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
-    }),
+    priceReel: "",
+    priceStory: "",
+    priceVisit: "",
+    avatarUrl: null,
+    isVerified: false,
+    instagramUrl: "",
+    youtubeUrl: "",
+    twitterUrl: "",
+    verificationCode: createVerificationCode(),
   });
 
-  const update = (field: keyof InfluencerFormData, value: string | string[] | number | boolean | null) => {
+  const update = (
+    field: keyof InfluencerFormData,
+    value: string | string[] | number | boolean | null
+  ) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const togglePlatform = (platform: string) => {
-    setForm((prev) => ({
-      ...prev,
-      platforms: prev.platforms.includes(platform)
-        ? prev.platforms.filter((p) => p !== platform)
-        : [...prev.platforms, platform],
-    }));
-  };
-
   const canProceed = () => {
-    if (isModal) {
-      // Modal has 5 steps
-      switch (step) {
-        case 0: return form.name.trim().length > 0 && form.avatarUrl !== null;
-        case 1: return form.city.length > 0 && form.bio.trim().length > 0 && form.niche.length > 0;
-        case 2: return true; // Verification step can be skipped
-        case 3: return parseInt(form.priceReel) > 0 && parseInt(form.priceStory) > 0;
-        case 4: return true;
-        default: return false;
-      }
-    } else {
-      // Page has 4 steps
-      switch (step) {
-        case 0: return form.name.trim().length > 0 && form.city.length > 0 && form.bio.trim().length > 0;
-        case 1: return form.niche.length > 0 && form.followers.trim().length > 0 && form.engagementRate.trim().length > 0 && form.platforms.length > 0;
-        case 2: return form.priceReel.trim().length > 0 && form.priceStory.trim().length > 0 && form.priceVisit.trim().length > 0;
-        case 3: return true;
-        default: return false;
-      }
+    switch (step) {
+      case 0:
+        return form.name.trim().length > 0 && form.avatarUrl !== null;
+      case 1:
+        return form.city.length > 0 && form.bio.trim().length > 0 && form.niche.length > 0;
+      case 2:
+        return true;
+      case 3:
+        return (
+          Number.parseInt(form.priceReel, 10) > 0 &&
+          Number.parseInt(form.priceStory, 10) > 0 &&
+          Number.parseInt(form.priceVisit, 10) > 0
+        );
+      case 4:
+        return true;
+      default:
+        return false;
     }
   };
 
   const handleSubmit = async () => {
     if (!user) {
-      toast({ title: "Please sign in first", description: "You need an account to create a profile.", variant: "destructive" });
+      toast({
+        title: "Please sign in first",
+        description: "You need an account to create a profile.",
+        variant: "destructive",
+      });
       navigate("/auth");
       return;
     }
@@ -114,18 +109,16 @@ export const useInfluencerRegistration = (
       niche: form.niche,
       followers: form.followers || "0",
       engagement_rate: form.engagementRate || "0",
-      platforms: form.platforms.length > 0 ? form.platforms : ["Instagram"],
-      price_reel: parseInt(form.priceReel) || 0,
-      price_story: parseInt(form.priceStory) || 0,
-      price_visit: parseInt(form.priceVisit) || 0,
-      ...(isModal && {
-        is_verified: form.isVerified || false,
-        instagram_url: form.instagramUrl || null,
-        youtube_url: form.youtubeUrl || null,
-        twitter_url: form.twitterUrl || null,
-        verification_code: form.verificationCode,
-        avatar_url: form.avatarUrl,
-      }),
+      platforms: form.platforms,
+      price_reel: Number.parseInt(form.priceReel, 10) || 0,
+      price_story: Number.parseInt(form.priceStory, 10) || 0,
+      price_visit: Number.parseInt(form.priceVisit, 10) || 0,
+      is_verified: form.platforms.length > 0,
+      instagram_url: form.platforms.includes("Instagram") ? form.instagramUrl || null : null,
+      youtube_url: form.platforms.includes("YouTube") ? form.youtubeUrl || null : null,
+      twitter_url: form.platforms.includes("Twitter") ? form.twitterUrl || null : null,
+      verification_code: form.verificationCode,
+      avatar_url: form.avatarUrl,
     };
 
     const { data, error } = await supabase
@@ -135,33 +128,42 @@ export const useInfluencerRegistration = (
       .single();
 
     if (!error) {
-      await supabase.from("profiles").update({
-        user_type: "influencer",
-        display_name: form.name,
-        ...(isModal && { avatar_url: form.avatarUrl }),
-      }).eq("user_id", user.id);
+      await supabase
+        .from("profiles")
+        .update({
+          user_type: "influencer",
+          display_name: form.name,
+          avatar_url: form.avatarUrl,
+        })
+        .eq("user_id", user.id);
+
       await refreshProfiles();
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", user.id] });
     }
 
     setSubmitting(false);
 
     if (error) {
-      toast({ title: "Error creating profile", description: error.message, variant: "destructive" });
-    } else {
-      const successMessage = isModal
-        ? "🚀 Profile Created! Welcome to InfluFlow! Your profile is now live."
-        : "🎉 Profile Created! Your influencer profile is now live. Brands can discover you!";
-
-      toast({ title: "Profile Created!", description: successMessage });
-
-      if (isModal && data?.id) {
-        navigate(`/influencer/${data.id}`);
-      } else {
-        navigate("/");
-      }
-
-      onSuccess?.();
+      toast({
+        title: "Error creating profile",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
     }
+
+    toast({
+      title: "Profile created",
+      description: "Your creator profile is now live and ready for brands to discover.",
+    });
+
+    if (data?.id) {
+      navigate(`/influencer/${data.id}`);
+    } else {
+      navigate("/");
+    }
+
+    onSuccess?.();
   };
 
   return {
@@ -170,7 +172,6 @@ export const useInfluencerRegistration = (
     submitting,
     form,
     update,
-    togglePlatform,
     canProceed,
     handleSubmit,
   };

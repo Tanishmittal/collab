@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Save, Instagram, Youtube, Twitter, Loader2, ArrowLeft } from "lucide-react";
+import { Save, Loader2, ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import AvatarUpload from "@/components/AvatarUpload";
+import PortfolioMediaUpload from "@/components/PortfolioMediaUpload";
 import SocialVerification from "@/components/SocialVerification";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,31 +12,76 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CITIES, NICHES } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useManagedOptions } from "@/hooks/useManagedOptions";
+import type { Database } from "@/integrations/supabase/types";
+import { goBackOr } from "@/lib/navigation";
 
-const PLATFORMS = [
-  { id: "Instagram", icon: Instagram, color: "from-pink-500 to-purple-500" },
-  { id: "YouTube", icon: Youtube, color: "from-red-500 to-red-600" },
-  { id: "Twitter", icon: Twitter, color: "from-sky-400 to-sky-500" },
-];
+type PortfolioItemRow = Database["public"]["Tables"]["portfolio_items"]["Row"];
+type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
+type PortfolioDraft = Pick<
+  PortfolioItemRow,
+  "id" | "title" | "description" | "platform" | "media_type" | "media_url" | "thumbnail_url" | "external_url" | "is_featured"
+> & {
+  input_mode: "upload" | "url";
+};
+
+const inferPortfolioMediaType = (url: string) => {
+  const cleanUrl = url.split("?")[0].toLowerCase();
+
+  if (/\.(mp4|mov|webm|m4v|avi|mkv)$/.test(cleanUrl)) {
+    return "video";
+  }
+
+  return "image";
+};
+
+const createPortfolioTitle = (description: string, index: number) => {
+  const trimmed = description.trim();
+  if (!trimmed) {
+    return `Portfolio Item ${index + 1}`;
+  }
+
+  return trimmed.length > 60 ? `${trimmed.slice(0, 57).trimEnd()}...` : trimmed;
+};
+
+const EMPTY_PORTFOLIO_ITEM: PortfolioDraft = {
+  id: "",
+  title: "",
+  description: "",
+  platform: "",
+  media_type: "image",
+  media_url: "",
+  thumbnail_url: "",
+  external_url: "",
+  is_featured: false,
+  input_mode: "upload",
+};
 
 const EditInfluencerProfile = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, influencerId } = useAuth();
+  const { cities, niches } = useManagedOptions();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const verificationRef = useRef<HTMLDivElement>(null);
+  const portfolioRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to verification section if query param is set
   useEffect(() => {
-    if (!loading && searchParams.get("section") === "verification" && verificationRef.current) {
+    if (loading) return;
+
+    if (searchParams.get("section") === "verification" && verificationRef.current) {
       verificationRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    if (searchParams.get("section") === "portfolio" && portfolioRef.current) {
+      portfolioRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [loading, searchParams]);
 
@@ -55,6 +101,9 @@ const EditInfluencerProfile = () => {
   const [twitterUrl, setTwitterUrl] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [isVerified, setIsVerified] = useState(false);
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioDraft[]>([]);
+  const [removedPortfolioItemIds, setRemovedPortfolioItemIds] = useState<string[]>([]);
+  const hasVerifiedPlatforms = platforms.length > 0;
 
   useEffect(() => {
     if (authLoading) return;
@@ -76,41 +125,93 @@ const EditInfluencerProfile = () => {
         return;
       }
 
-      setProfileId(data.id);
-      setName(data.name);
-      setCity(data.city);
-      setBio(data.bio || "");
-      setNiche(data.niche);
-      setFollowers(data.followers);
-      setEngagementRate(data.engagement_rate || "");
-      setPlatforms(data.platforms || []);
-      setPriceReel(String(data.price_reel));
-      setPriceStory(String(data.price_story));
-      setPriceVisit(String(data.price_visit));
-      setAvatarUrl((data as any).avatar_url || null);
-      setInstagramUrl((data as any).instagram_url || "");
-      setYoutubeUrl((data as any).youtube_url || "");
-      setTwitterUrl((data as any).twitter_url || "");
-      setVerificationCode((data as any).verification_code || "");
-      setIsVerified((data as any).is_verified || false);
+      const profile = data as InfluencerProfileRow & {
+        avatar_url?: string | null;
+        instagram_url?: string | null;
+        youtube_url?: string | null;
+        twitter_url?: string | null;
+        verification_code?: string | null;
+      };
+
+      setProfileId(profile.id);
+      setName(profile.name);
+      setCity(profile.city);
+      setBio(profile.bio || "");
+      setNiche(profile.niche);
+      setFollowers(profile.followers);
+      setEngagementRate(profile.engagement_rate || "");
+      const initialVerifiedPlatforms = [
+        profile.instagram_url ? "Instagram" : null,
+        profile.youtube_url ? "YouTube" : null,
+        profile.twitter_url ? "Twitter" : null,
+      ].filter(Boolean) as string[];
+      setPlatforms(initialVerifiedPlatforms);
+      setPriceReel(String(profile.price_reel));
+      setPriceStory(String(profile.price_story));
+      setPriceVisit(String(profile.price_visit));
+      setAvatarUrl(profile.avatar_url || null);
+      setInstagramUrl(profile.instagram_url || "");
+      setYoutubeUrl(profile.youtube_url || "");
+      setTwitterUrl(profile.twitter_url || "");
+      setVerificationCode(profile.verification_code || "");
+      setIsVerified(initialVerifiedPlatforms.length > 0);
+
+      const { data: portfolioRows } = await supabase
+        .from("portfolio_items")
+        .select("*")
+        .eq("influencer_profile_id", profile.id)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false });
+
+      setPortfolioItems(
+        ((portfolioRows || []) as PortfolioItemRow[])
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            description: item.description || "",
+            platform: item.platform || "",
+            media_type: item.media_type,
+            media_url: item.media_url,
+            thumbnail_url: item.thumbnail_url || "",
+            external_url: item.external_url || "",
+            is_featured: item.is_featured,
+            input_mode: "upload",
+          }))
+      );
       setLoading(false);
     };
     fetchProfile();
-  }, [user, authLoading]);
+  }, [user, authLoading, navigate, toast]);
 
-  const togglePlatform = (platform: string) => {
-    setPlatforms(prev =>
-      prev.includes(platform) ? prev.filter(p => p !== platform) : [...prev, platform]
+  const updatePortfolioItem = (index: number, field: keyof PortfolioDraft, value: string | boolean) => {
+    setPortfolioItems((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item))
     );
+  };
+
+  const addPortfolioItem = () => {
+    setPortfolioItems((current) => [...current, { ...EMPTY_PORTFOLIO_ITEM, id: crypto.randomUUID() }]);
+  };
+
+  const removePortfolioItem = (index: number) => {
+    setPortfolioItems((current) => {
+      const item = current[index];
+      if (item?.id) {
+        setRemovedPortfolioItemIds((removed) => [...removed, item.id as string]);
+      }
+      return current.filter((_, itemIndex) => itemIndex !== index);
+    });
   };
 
   const handleSave = async () => {
     if (!user || !profileId) return;
 
-    if (!name.trim() || !city || !niche || !followers.trim() || !priceReel || !priceStory || !priceVisit || platforms.length === 0) {
+    if (!name.trim() || !city || !niche || !followers.trim() || !priceReel || !priceStory || !priceVisit) {
       toast({ title: "Missing fields", description: "Please fill in all required fields.", variant: "destructive" });
       return;
     }
+
+    const verifiedPlatforms = platforms;
 
     setSaving(true);
     const { error } = await supabase
@@ -122,20 +223,45 @@ const EditInfluencerProfile = () => {
         niche,
         followers: followers.trim(),
         engagement_rate: engagementRate,
-        platforms,
+        platforms: verifiedPlatforms,
         price_reel: parseInt(priceReel) || 0,
         price_story: parseInt(priceStory) || 0,
         price_visit: parseInt(priceVisit) || 0,
-        instagram_url: instagramUrl.trim() || null,
-        youtube_url: youtubeUrl.trim() || null,
-        twitter_url: twitterUrl.trim() || null,
+        is_verified: verifiedPlatforms.length > 0,
+        instagram_url: verifiedPlatforms.includes("Instagram") ? instagramUrl.trim() || null : null,
+        youtube_url: verifiedPlatforms.includes("YouTube") ? youtubeUrl.trim() || null : null,
+        twitter_url: verifiedPlatforms.includes("Twitter") ? twitterUrl.trim() || null : null,
         avatar_url: avatarUrl,
-      } as any)
+      })
       .eq("id", profileId);
 
-    // Also update display name in profiles
     if (!error) {
-      await supabase.from("profiles").update({ display_name: name.trim() }).eq("user_id", user.id);
+      await Promise.all([
+        supabase.from("profiles").update({ display_name: name.trim() }).eq("user_id", user.id),
+        removedPortfolioItemIds.length > 0
+          ? supabase.from("portfolio_items").delete().in("id", removedPortfolioItemIds)
+          : Promise.resolve(),
+        portfolioItems.length > 0
+          ? supabase.from("portfolio_items").upsert(
+              portfolioItems
+                .filter((item) => item.media_url.trim())
+                .map((item, index) => ({
+                  id: item.id || undefined,
+                  influencer_profile_id: profileId,
+                  title: createPortfolioTitle(item.description || "", index),
+                  description: item.description?.trim() || null,
+                  platform: null,
+                  media_type: inferPortfolioMediaType(item.media_url),
+                  media_url: item.media_url.trim(),
+                  thumbnail_url: null,
+                  external_url: null,
+                  is_featured: false,
+                  sort_order: index,
+                })),
+              { onConflict: "id" }
+            )
+          : Promise.resolve(),
+      ]);
     }
 
     setSaving(false);
@@ -166,7 +292,12 @@ const EditInfluencerProfile = () => {
         <Navbar variant="minimal" title="Edit Profile" />
 
       <div className="container max-w-5xl py-6 pb-16 space-y-4">
-        <Button variant="ghost" size="sm" className="mb-1 px-0 text-muted-foreground hover:text-foreground" onClick={() => navigate(-1)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-1 hidden px-0 text-muted-foreground hover:text-foreground md:inline-flex"
+          onClick={() => goBackOr(navigate, influencerId ? `/influencer/${influencerId}?tab=influencer` : "/dashboard")}
+        >
           <ArrowLeft size={16} className="mr-1" /> Back
         </Button>
 
@@ -201,7 +332,7 @@ const EditInfluencerProfile = () => {
               <Label>City *</Label>
               <Select value={city} onValueChange={setCity}>
                 <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>{CITIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent>{cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
@@ -212,47 +343,32 @@ const EditInfluencerProfile = () => {
           </CardContent>
         </Card>
 
-        {/* Platforms & Niche */}
+        {/* Niche & Audience */}
         <Card className="glass-card">
           <CardHeader className="pb-2">
-            <CardTitle className="font-display text-lg">Platforms & Niche</CardTitle>
+            <CardTitle className="font-display text-lg">Niche & Audience</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label>Platforms *</Label>
-              <div className="grid grid-cols-3 gap-3 mt-1.5">
-                {PLATFORMS.map(p => {
-                  const Icon = p.icon;
-                  const selected = platforms.includes(p.id);
-                  return (
-                    <button key={p.id} type="button" onClick={() => togglePlatform(p.id)}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                        selected ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/40 bg-card"
-                      }`}>
-                      <Icon className={`w-6 h-6 ${selected ? "text-primary" : "text-muted-foreground"}`} />
-                      <span className={`text-xs font-medium ${selected ? "text-primary" : "text-muted-foreground"}`}>{p.id}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
             <div>
               <Label>Niche *</Label>
               <Select value={niche} onValueChange={setNiche}>
                 <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>{NICHES.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                <SelectContent>{niches.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Followers *</Label>
-                <Input value={followers} onChange={e => setFollowers(e.target.value)} maxLength={20} className="mt-1.5" placeholder="e.g. 32K" />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Followers</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{followers || "0"}</p>
               </div>
-              <div>
-                <Label>Engagement Rate (%)</Label>
-                <Input type="number" step="0.1" min="0" max="100" value={engagementRate} onChange={e => setEngagementRate(e.target.value)} className="mt-1.5" />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Engagement Rate</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{engagementRate || "0"}%</p>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Audience stats are pulled from your verified social accounts and can be refreshed from the verification section below.
+            </p>
           </CardContent>
         </Card>
 
@@ -263,9 +379,9 @@ const EditInfluencerProfile = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             {[
-              { label: "Reel Promotion", emoji: "🎬", desc: "Short-form video content", value: priceReel, setter: setPriceReel },
-              { label: "Story Promotion", emoji: "📱", desc: "24-hour story feature", value: priceStory, setter: setPriceStory },
-              { label: "Visit & Review", emoji: "📍", desc: "In-person visit with content", value: priceVisit, setter: setPriceVisit },
+              { label: "Reel Promotion", emoji: "Reel", desc: "Short-form video content", value: priceReel, setter: setPriceReel },
+              { label: "Story Promotion", emoji: "Story", desc: "24-hour story feature", value: priceStory, setter: setPriceStory },
+              { label: "Visit & Review", emoji: "Visit", desc: "In-person visit with content", value: priceVisit, setter: setPriceVisit },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card">
                 <span className="text-2xl">{item.emoji}</span>
@@ -274,11 +390,101 @@ const EditInfluencerProfile = () => {
                   <p className="text-xs text-muted-foreground">{item.desc}</p>
                 </div>
                 <div className="flex items-center gap-1.5 w-32">
-                  <span className="text-muted-foreground font-medium">₹</span>
+                  <span className="text-muted-foreground font-medium">Rs</span>
                   <Input type="number" min="0" value={item.value} onChange={e => item.setter(e.target.value)} className="text-right" />
                 </div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card">
+          <div ref={portfolioRef} />
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="font-display text-lg">Portfolio</CardTitle>
+              <Button type="button" variant="outline" onClick={addPortfolioItem}>Add Item</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {portfolioItems.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-muted-foreground">
+                Add portfolio items to showcase your best creator work.
+              </div>
+            ) : (
+              portfolioItems.map((item, index) => (
+                <div key={item.id || index} className="space-y-4 rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900">Portfolio Item {index + 1}</h3>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={saving || !item.media_url.trim()}
+                        onClick={handleSave}
+                      >
+                        {saving ? "Saving..." : "Save Item"}
+                      </Button>
+                      <Button type="button" variant="ghost" className="text-slate-500 hover:text-destructive" onClick={() => removePortfolioItem(index)}>Remove</Button>
+                    </div>
+                  </div>
+                  {user && (
+                    <div className="space-y-3">
+                      {item.input_mode === "upload" && (
+                        <PortfolioMediaUpload
+                          userId={user.id}
+                          itemId={item.id || `portfolio-${index}`}
+                          kind="media"
+                          mediaType="auto"
+                          currentUrl={item.media_url}
+                          onUploaded={(url) => {
+                            updatePortfolioItem(index, "media_url", url);
+                            updatePortfolioItem(index, "media_type", inferPortfolioMediaType(url));
+                            updatePortfolioItem(index, "input_mode", "upload");
+                          }}
+                        />
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{item.input_mode === "upload" ? "Uploaded media will be shown on your profile." : "Use this if your work sample lives on another platform."}</span>
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="h-auto p-0 text-xs text-teal-700"
+                          onClick={() => updatePortfolioItem(index, "input_mode", item.input_mode === "upload" ? "url" : "upload")}
+                        >
+                          {item.input_mode === "upload" ? "Use external link instead" : "Switch back to file upload"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {item.input_mode === "url" ? (
+                    <div>
+                      <Label>External Media URL *</Label>
+                      <Input
+                        value={item.media_url}
+                        onChange={(e) => {
+                          updatePortfolioItem(index, "media_url", e.target.value);
+                          updatePortfolioItem(index, "media_type", inferPortfolioMediaType(e.target.value));
+                        }}
+                        className="mt-1.5"
+                        placeholder="Paste an Instagram, YouTube, or hosted media URL"
+                      />
+                    </div>
+                  ) : null}
+                  <div>
+                    <Label>Description</Label>
+                    <Textarea
+                      value={item.description || ""}
+                      onChange={(e) => updatePortfolioItem(index, "description", e.target.value)}
+                      className="mt-1.5 resize-none"
+                      rows={3}
+                      placeholder="What was this project and what did you create?"
+                    />
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -287,6 +493,7 @@ const EditInfluencerProfile = () => {
         <SocialVerification
           verificationCode={verificationCode}
           isVerified={isVerified}
+          verifiedPlatforms={platforms}
           instagramUrl={instagramUrl}
           youtubeUrl={youtubeUrl}
           twitterUrl={twitterUrl}
@@ -294,6 +501,7 @@ const EditInfluencerProfile = () => {
           onYoutubeChange={setYoutubeUrl}
           onTwitterChange={setTwitterUrl}
           onVerified={() => setIsVerified(true)}
+          onVerifiedPlatformsChange={setPlatforms}
           onUnverified={() => {
             setIsVerified(false);
             setFollowers("");
@@ -315,3 +523,6 @@ const EditInfluencerProfile = () => {
 };
 
 export default EditInfluencerProfile;
+
+
+

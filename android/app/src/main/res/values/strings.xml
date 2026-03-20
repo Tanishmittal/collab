@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">InfluFlow</string>
-    <string name="title_activity_main">InfluFlow</string>
+    <string name="app_name">Influgal</string>
+    <string name="title_activity_main">Influgal</string>
     <string name="package_name">com.influflow.app</string>
     <string name="custom_url_scheme">com.influflow.app</string>
 </resources>

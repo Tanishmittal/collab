@@ -11,6 +11,8 @@ import {
   Target,
   Users,
   Zap,
+  ShieldCheck,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,9 +22,9 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CITIES, NICHES } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { CampaignFormData, CampaignActivitySummary } from "@/hooks/useCampaignForm";
+import { useManagedOptions } from "@/hooks/useManagedOptions";
 
 const nicheColors: Record<string, string> = {
   Food: "text-orange-600 border-orange-200 bg-orange-50",
@@ -39,14 +41,13 @@ interface CampaignFormProps {
   step?: number;
   isEdit?: boolean;
   form: CampaignFormData;
-  update: (field: keyof CampaignFormData, value: string | Date | undefined) => void;
+  update: (field: keyof CampaignFormData, value: string | string[] | boolean | Date | undefined) => void;
   deliverableCounts: Record<string, number>;
   updateDeliverable: (label: string, delta: number) => void;
   includeEventVisit: boolean;
   setIncludeEventVisit: (value: boolean) => void;
   campaignDeliverables: string[];
   activitySummary?: CampaignActivitySummary;
-  logoOptions: string[];
   deliverableOptions: readonly string[];
   onSubmit?: () => void;
   submitting?: boolean;
@@ -63,13 +64,14 @@ const CampaignForm = ({
   setIncludeEventVisit,
   campaignDeliverables,
   activitySummary,
-  logoOptions,
   deliverableOptions,
   onSubmit,
   submitting = false,
 }: CampaignFormProps) => {
+  const { cities, niches } = useManagedOptions();
   const targetingLocked = activitySummary ? activitySummary.applicationsCount > 0 : false;
   const commercialLocked = activitySummary ? (activitySummary.acceptedCount > 0 || activitySummary.bookingsCount > 0) : false;
+  const platformOptions = ["Instagram", "YouTube", "Twitter"] as const;
 
   // Preview calculations
   const previewBudget = form.budget ? parseInt(form.budget, 10) : 0;
@@ -79,6 +81,116 @@ const CampaignForm = ({
   const previewSlotsLeft = Math.max(0, previewSlots - previewApplied);
   const previewIsUrgent = previewProgress >= 80 && previewSlotsLeft > 0;
   const previewNicheStyle = nicheColors[form.niche] || "text-teal-600 border-teal-200 bg-teal-50";
+  const togglePlatform = (platform: string) => {
+    const hasPlatform = form.targetPlatforms.includes(platform);
+    update(
+      "targetPlatforms",
+      hasPlatform
+        ? form.targetPlatforms.filter((value) => value !== platform)
+        : [...form.targetPlatforms, platform]
+    );
+  };
+
+  const FiltersSection = () => (
+    <div className="space-y-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-slate-900">Creator Requirements</p>
+        <p className="text-xs leading-relaxed text-slate-500">
+          Use the creator information already collected in influencer profiles to control who can apply.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Required Platform</Label>
+        <div className="flex flex-wrap gap-2">
+          {platformOptions.map((platform) => {
+            const selected = form.targetPlatforms.includes(platform);
+            return (
+              <Button
+                key={platform}
+                type="button"
+                variant="outline"
+                disabled={targetingLocked}
+                className={cn(
+                  "rounded-xl border-slate-200 bg-white px-4 font-semibold shadow-none",
+                  selected && "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                )}
+                onClick={() => togglePlatform(platform)}
+              >
+                {platform}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Minimum Followers</Label>
+          <Input
+            type="number"
+            disabled={targetingLocked}
+            placeholder="e.g. 10000"
+            className="h-12 rounded-2xl border-slate-200 bg-white px-4 font-bold shadow-none"
+            value={form.minFollowers}
+            onChange={(e) => update("minFollowers", e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Minimum Engagement (%)</Label>
+          <Input
+            type="number"
+            step="0.1"
+            disabled={targetingLocked}
+            placeholder="e.g. 3.5"
+            className="h-12 rounded-2xl border-slate-200 bg-white px-4 font-bold shadow-none"
+            value={form.minEngagementRate}
+            onChange={(e) => update("minEngagementRate", e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <button
+          type="button"
+          disabled={targetingLocked}
+          onClick={() => update("verifiedSocialsOnly", !form.verifiedSocialsOnly)}
+          className={cn(
+            "flex items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
+            form.verifiedSocialsOnly ? "border-teal-200 bg-teal-50" : "border-slate-200 bg-white",
+            targetingLocked && "cursor-not-allowed opacity-60"
+          )}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-teal-600 shadow-sm">
+            <ShieldCheck size={16} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Verified socials only</p>
+            <p className="text-xs leading-relaxed text-slate-500">Only creators with verified social accounts can apply.</p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          disabled={targetingLocked}
+          onClick={() => update("portfolioRequired", !form.portfolioRequired)}
+          className={cn(
+            "flex items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
+            form.portfolioRequired ? "border-teal-200 bg-teal-50" : "border-slate-200 bg-white",
+            targetingLocked && "cursor-not-allowed opacity-60"
+          )}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-teal-600 shadow-sm">
+            <ImageIcon size={16} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Portfolio required</p>
+            <p className="text-xs leading-relaxed text-slate-500">Only creators with published work samples can apply.</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
 
   if (isEdit) {
     // Edit mode: single form layout
@@ -92,30 +204,13 @@ const CampaignForm = ({
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-[1fr_88px]">
-          <div className="space-y-2">
-            <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Brand Name *</Label>
-            <Input
-              className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-lg font-bold shadow-none"
-              value={form.brand}
-              onChange={(e) => update("brand", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="block text-center text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Mark</Label>
-            <Select value={form.brandLogo} onValueChange={(value) => update("brandLogo", value)}>
-              <SelectTrigger className="h-14 rounded-2xl border-slate-200 bg-slate-50 text-xl font-bold shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl border-slate-200">
-                {logoOptions.map((option) => (
-                  <SelectItem key={option} value={option} className="font-bold">
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-2">
+          <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Brand Name *</Label>
+          <Input
+            className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-lg font-bold shadow-none"
+            value={form.brand}
+            onChange={(e) => update("brand", e.target.value)}
+          />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -126,7 +221,7 @@ const CampaignForm = ({
                 <SelectValue placeholder="Select city" />
               </SelectTrigger>
               <SelectContent className="rounded-2xl border-slate-200">
-                {CITIES.map((city) => (
+                {cities.map((city) => (
                   <SelectItem key={city} value={city} className="font-bold">
                     {city}
                   </SelectItem>
@@ -141,7 +236,7 @@ const CampaignForm = ({
                 <SelectValue placeholder="Select niche" />
               </SelectTrigger>
               <SelectContent className="rounded-2xl border-slate-200">
-                {NICHES.map((niche) => (
+                {niches.map((niche) => (
                   <SelectItem key={niche} value={niche} className="font-bold">
                     {niche}
                   </SelectItem>
@@ -273,6 +368,8 @@ const CampaignForm = ({
           </Popover>
         </div>
 
+        <FiltersSection />
+
         <div className="flex justify-end border-t border-slate-200 pt-6">
           <Button
             className="rounded-2xl bg-teal-600 px-10 font-bold text-white hover:bg-teal-700"
@@ -290,32 +387,15 @@ const CampaignForm = ({
   if (step === 0) {
     return (
       <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-[1fr_88px]">
-          <div className="space-y-2">
-            <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Brand Name *</Label>
-            <Input
-              placeholder="e.g. Burger Cafe"
-              className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-lg font-bold shadow-none"
-              value={form.brand}
-              onChange={(e) => update("brand", e.target.value)}
-              maxLength={100}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="block text-center text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Mark</Label>
-            <Select value={form.brandLogo} onValueChange={(value) => update("brandLogo", value)}>
-              <SelectTrigger className="h-14 rounded-2xl border-slate-200 bg-slate-50 text-xl font-bold shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl border-slate-200">
-                {logoOptions.map((option) => (
-                  <SelectItem key={option} value={option} className="font-bold">
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-2">
+          <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Brand Name *</Label>
+          <Input
+            placeholder="e.g. Burger Cafe"
+            className="h-14 rounded-2xl border-slate-200 bg-slate-50 px-5 text-lg font-bold shadow-none"
+            value={form.brand}
+            onChange={(e) => update("brand", e.target.value)}
+            maxLength={100}
+          />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -326,7 +406,7 @@ const CampaignForm = ({
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent className="rounded-2xl border-slate-200">
-                {CITIES.map((city) => (
+                {cities.map((city) => (
                   <SelectItem key={city} value={city} className="font-bold">
                     {city}
                   </SelectItem>
@@ -341,7 +421,7 @@ const CampaignForm = ({
                 <SelectValue placeholder="Select niche" />
               </SelectTrigger>
               <SelectContent className="rounded-2xl border-slate-200">
-                {NICHES.map((niche) => (
+                {niches.map((niche) => (
                   <SelectItem key={niche} value={niche} className="font-bold">
                     {niche}
                   </SelectItem>
@@ -497,6 +577,8 @@ const CampaignForm = ({
             </p>
           </div>
         </div>
+
+        <FiltersSection />
       </div>
     );
   }

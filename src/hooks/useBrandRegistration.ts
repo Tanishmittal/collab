@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +11,7 @@ export const CAMPAIGN_GOALS = ["Brand Awareness", "Footfall", "Product Launch", 
 export const RESPONSE_TIME_OPTIONS = ["Usually within 24 hours", "Usually within 2-3 days", "Within a week"];
 
 export interface BrandFormData {
+  logoUrl: string;
   businessName: string;
   businessType: string;
   city: string;
@@ -30,11 +32,13 @@ export interface BrandFormData {
 
 export const useBrandRegistration = (onSuccess?: () => void) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, refreshProfiles } = useAuth();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<BrandFormData>({
+    logoUrl: "",
     businessName: "",
     businessType: "",
     city: "",
@@ -92,6 +96,7 @@ export const useBrandRegistration = (onSuccess?: () => void) => {
     setSubmitting(true);
     const { error } = await supabase.from("brand_profiles").insert({
       user_id: user.id,
+      logo_url: form.logoUrl || null,
       business_name: form.businessName,
       business_type: form.businessType,
       city: form.city,
@@ -114,6 +119,7 @@ export const useBrandRegistration = (onSuccess?: () => void) => {
     if (!error) {
       await supabase.from("profiles").update({ user_type: "brand", display_name: form.businessName }).eq("user_id", user.id);
       await refreshProfiles?.();
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", user.id] });
     }
 
     setSubmitting(false);

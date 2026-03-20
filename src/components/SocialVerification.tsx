@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Instagram, Youtube, Twitter, Loader2, Copy, CheckCircle, ExternalLink, ShieldCheck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface SocialVerificationProps {
   verificationCode: string;
   isVerified: boolean;
+  verifiedPlatforms: string[];
   instagramUrl: string;
   youtubeUrl: string;
   twitterUrl: string;
@@ -18,19 +19,27 @@ interface SocialVerificationProps {
   onYoutubeChange: (v: string) => void;
   onTwitterChange: (v: string) => void;
   onVerified: () => void;
+  onVerifiedPlatformsChange: (platforms: string[]) => void;
   onUnverified?: () => void;
   onStatsFetched?: (stats: { followers?: string; engagementRate?: string }) => void;
 }
 
 const PLATFORMS = [
-  { id: "instagram", label: "Instagram", icon: Instagram, placeholder: "https://instagram.com/yourhandle", color: "text-pink-500", urlKey: "instagram_url" },
-  { id: "youtube", label: "YouTube", icon: Youtube, placeholder: "https://youtube.com/@yourchannel", color: "text-red-500", urlKey: "youtube_url" },
-  { id: "twitter", label: "X (Twitter)", icon: Twitter, placeholder: "https://x.com/yourhandle", color: "text-sky-500", urlKey: "twitter_url" },
-];
+  { id: "instagram", label: "Instagram", icon: Instagram, placeholder: "https://instagram.com/yourhandle", color: "text-pink-500" },
+  { id: "youtube", label: "YouTube", icon: Youtube, placeholder: "https://youtube.com/@yourchannel", color: "text-red-500" },
+  { id: "twitter", label: "X (Twitter)", icon: Twitter, placeholder: "https://x.com/yourhandle", color: "text-sky-500" },
+] as const;
+
+const toStoredPlatform = (platformId: string) =>
+  platformId === "instagram" ? "Instagram" : platformId === "youtube" ? "YouTube" : "Twitter";
+
+const toPlatformId = (platform: string) =>
+  platform === "Instagram" ? "instagram" : platform === "YouTube" ? "youtube" : "twitter";
 
 const SocialVerification = ({
   verificationCode,
   isVerified,
+  verifiedPlatforms,
   instagramUrl,
   youtubeUrl,
   twitterUrl,
@@ -38,6 +47,7 @@ const SocialVerification = ({
   onYoutubeChange,
   onTwitterChange,
   onVerified,
+  onVerifiedPlatformsChange,
   onUnverified,
   onStatsFetched,
 }: SocialVerificationProps) => {
@@ -45,23 +55,27 @@ const SocialVerification = ({
   const [verifying, setVerifying] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [verifiedPlatforms, setVerifiedPlatforms] = useState<Set<string>>(() => {
-    const initial = new Set<string>();
-    if (isVerified) {
-      if (instagramUrl?.trim()) initial.add("instagram");
-      if (youtubeUrl?.trim()) initial.add("youtube");
-      if (twitterUrl?.trim()) initial.add("twitter");
-    }
-    return initial;
-  });
+  const [verifiedPlatformSet, setVerifiedPlatformSet] = useState<Set<string>>(
+    () => new Set(verifiedPlatforms.map(toPlatformId))
+  );
+
+  useEffect(() => {
+    setVerifiedPlatformSet(new Set(verifiedPlatforms.map(toPlatformId)));
+  }, [verifiedPlatforms]);
 
   const urls: Record<string, string> = { instagram: instagramUrl, youtube: youtubeUrl, twitter: twitterUrl };
   const setters: Record<string, (v: string) => void> = { instagram: onInstagramChange, youtube: onYoutubeChange, twitter: onTwitterChange };
 
+  const syncVerifiedPlatforms = (platformSet: Set<string>) => {
+    const nextPlatforms = Array.from(platformSet).map(toStoredPlatform);
+    setVerifiedPlatformSet(new Set(platformSet));
+    onVerifiedPlatformsChange(nextPlatforms);
+  };
+
   const copyCode = async () => {
     await navigator.clipboard.writeText(verificationCode);
     setCopied(true);
-    toast({ title: "Copied!", description: "Paste this code in your social media bio." });
+    toast({ title: "Copied", description: "Paste this code in your social media bio." });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -75,7 +89,7 @@ const SocialVerification = ({
     setVerifying(platformId);
     try {
       const { data, error } = await supabase.functions.invoke("verify-social", {
-        body: { platform: platformId, url },
+        body: { platform: platformId, url, verificationCode },
       });
 
       if (error) {
@@ -95,8 +109,13 @@ const SocialVerification = ({
       }
 
       if (data.verified) {
-        setVerifiedPlatforms(prev => new Set(prev).add(platformId));
-        toast({ title: "✅ Verified!", description: `Your account has been verified!${data.stats?.followers ? ` Followers: ${data.stats.followers}` : ""}` });
+        const nextVerified = new Set(verifiedPlatformSet);
+        nextVerified.add(platformId);
+        syncVerifiedPlatforms(nextVerified);
+        toast({
+          title: "Verified",
+          description: `Your account has been verified.${data.stats?.followers ? ` Followers: ${data.stats.followers}` : ""}`,
+        });
         onVerified();
       } else {
         toast({
@@ -105,8 +124,9 @@ const SocialVerification = ({
           variant: "destructive",
         });
       }
-    } catch (err: any) {
-      toast({ title: "Verification failed", description: err.message || "Something went wrong. Try again.", variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
+      toast({ title: "Verification failed", description: message, variant: "destructive" });
     } finally {
       setVerifying(null);
     }
@@ -115,41 +135,22 @@ const SocialVerification = ({
   const handleRemoveVerification = async (platformId: string) => {
     setRemoving(platformId);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const platform = PLATFORMS.find(p => p.id === platformId);
+      const platform = PLATFORMS.find((item) => item.id === platformId);
       if (!platform) return;
 
-      // Clear the URL and unverify
-      const updateData: Record<string, any> = { [platform.urlKey]: null };
-
-      // Check if any other platforms remain verified
-      const newVerified = new Set(verifiedPlatforms);
-      newVerified.delete(platformId);
-
-      // If no platforms remain verified, unset is_verified and clear stats
-      if (newVerified.size === 0) {
-        updateData.is_verified = false;
-        updateData.followers = "";
-        updateData.engagement_rate = null;
-      }
-
-      await supabase
-        .from("influencer_profiles")
-        .update(updateData)
-        .eq("user_id", user.id);
-
-      setVerifiedPlatforms(newVerified);
+      const nextVerified = new Set(verifiedPlatformSet);
+      nextVerified.delete(platformId);
+      syncVerifiedPlatforms(nextVerified);
       setters[platformId]("");
 
-      if (newVerified.size === 0) {
+      if (nextVerified.size === 0) {
         onUnverified?.();
       }
 
       toast({ title: "Verification removed", description: `${platform.label} verification has been removed.` });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Could not remove verification.", variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not remove verification.";
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setRemoving(null);
     }
@@ -158,24 +159,23 @@ const SocialVerification = ({
   return (
     <Card className="glass-card">
       <CardHeader className="pb-2">
-        <CardTitle className="font-display text-lg flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 font-display text-lg">
           <ShieldCheck size={20} className="text-primary" />
           Social Verification
           {isVerified && (
-            <Badge className="bg-success/20 text-success border-success/30 text-xs ml-auto">
+            <Badge className="ml-auto border-success/30 bg-success/20 text-xs text-success">
               <CheckCircle size={12} className="mr-1" /> Verified
             </Badge>
           )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Verification Code */}
-        <div className="p-4 rounded-xl border border-dashed border-primary/30 bg-primary/5">
-          <p className="text-sm text-muted-foreground mb-2">
+        <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
+          <p className="mb-2 text-sm text-muted-foreground">
             Add this code to any of your social media bios, then click <strong>Verify</strong>:
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-background px-3 py-2 rounded-lg font-mono text-sm text-foreground border border-border">
+            <code className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-foreground">
               {verificationCode}
             </code>
             <Button variant="outline" size="sm" onClick={copyCode} className="shrink-0">
@@ -185,25 +185,24 @@ const SocialVerification = ({
           </div>
         </div>
 
-        {/* Platform URLs */}
-        {PLATFORMS.map((p) => {
-          const Icon = p.icon;
-          const isPlatformVerified = verifiedPlatforms.has(p.id);
+        {PLATFORMS.map((platform) => {
+          const Icon = platform.icon;
+          const isPlatformVerified = verifiedPlatformSet.has(platform.id);
           return (
-            <div key={p.id} className="space-y-1.5">
+            <div key={platform.id} className="space-y-1.5">
               <Label className="flex items-center gap-1.5">
-                <Icon size={14} className={p.color} /> {p.label}
+                <Icon size={14} className={platform.color} /> {platform.label}
                 {isPlatformVerified && (
-                  <Badge className="bg-success/20 text-success border-success/30 text-[10px] px-1.5 py-0 ml-1">
+                  <Badge className="ml-1 border-success/30 bg-success/20 px-1.5 py-0 text-[10px] text-success">
                     <CheckCircle size={10} className="mr-0.5" /> Verified
                   </Badge>
                 )}
               </Label>
               <div className="flex gap-2">
                 <Input
-                  value={urls[p.id]}
-                  onChange={(e) => setters[p.id](e.target.value)}
-                  placeholder={p.placeholder}
+                  value={urls[platform.id]}
+                  onChange={(e) => setters[platform.id](e.target.value)}
+                  placeholder={platform.placeholder}
                   className="flex-1"
                   disabled={isPlatformVerified}
                 />
@@ -211,30 +210,22 @@ const SocialVerification = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleRemoveVerification(p.id)}
+                    onClick={() => handleRemoveVerification(platform.id)}
                     disabled={removing !== null}
-                    className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                   >
-                    {removing === p.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <XCircle size={14} />
-                    )}
+                    {removing === platform.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
                     Remove
                   </Button>
                 ) : (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleVerify(p.id)}
-                    disabled={!urls[p.id]?.trim() || verifying !== null}
+                    onClick={() => handleVerify(platform.id)}
+                    disabled={!urls[platform.id]?.trim() || verifying !== null}
                     className="shrink-0"
                   >
-                    {verifying === p.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <ExternalLink size={14} />
-                    )}
+                    {verifying === platform.id ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                     Verify
                   </Button>
                 )}
@@ -244,7 +235,7 @@ const SocialVerification = ({
         })}
 
         <p className="text-xs text-muted-foreground">
-          Your social URLs are kept private. Only verified badges are shown publicly. Use <strong>Stats</strong> to auto-fill follower count & engagement rate from Instagram.
+          Only verified socials are shown publicly. Follower count and engagement rate can be refreshed from verified accounts.
         </p>
       </CardContent>
     </Card>

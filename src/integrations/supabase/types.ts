@@ -223,10 +223,15 @@ export type Database = {
           id: string
           influencers_applied: number
           influencers_needed: number
+          min_engagement_rate: number | null
+          min_followers: number | null
           niche: string
+          portfolio_required: boolean
           status: string
+          target_platforms: string[]
           updated_at: string
           user_id: string
+          verified_socials_only: boolean
         }
         Insert: {
           brand: string
@@ -240,10 +245,15 @@ export type Database = {
           id?: string
           influencers_applied?: number
           influencers_needed?: number
+          min_engagement_rate?: number | null
+          min_followers?: number | null
           niche: string
+          portfolio_required?: boolean
           status?: string
+          target_platforms?: string[]
           updated_at?: string
           user_id: string
+          verified_socials_only?: boolean
         }
         Update: {
           brand?: string
@@ -257,10 +267,42 @@ export type Database = {
           id?: string
           influencers_applied?: number
           influencers_needed?: number
+          min_engagement_rate?: number | null
+          min_followers?: number | null
           niche?: string
+          portfolio_required?: boolean
           status?: string
+          target_platforms?: string[]
           updated_at?: string
           user_id?: string
+          verified_socials_only?: boolean
+        }
+        Relationships: []
+      }
+      cities: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          slug?: string
+          sort_order?: number
         }
         Relationships: []
       }
@@ -390,12 +432,146 @@ export type Database = {
           },
         ]
       }
+      niches: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          action_url: string | null
+          body: string | null
+          created_at: string
+          id: string
+          metadata: Json
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          action_url?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          read?: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          action_url?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      portfolio_items: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          description: string | null
+          external_url: string | null
+          id: string
+          influencer_profile_id: string
+          is_featured: boolean
+          media_type: string
+          media_url: string
+          metrics: Json
+          platform: string | null
+          sort_order: number
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          influencer_profile_id: string
+          is_featured?: boolean
+          media_type?: string
+          media_url: string
+          metrics?: Json
+          platform?: string | null
+          sort_order?: number
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          influencer_profile_id?: string
+          is_featured?: boolean
+          media_type?: string
+          media_url?: string
+          metrics?: Json
+          platform?: string | null
+          sort_order?: number
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_items_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_items_influencer_profile_id_fkey"
+            columns: ["influencer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "influencer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           display_name: string | null
+          fcm_token: string | null
           id: string
+          notifications_enabled: boolean
           updated_at: string
           user_id: string
           user_type: string
@@ -404,7 +580,9 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          fcm_token?: string | null
           id?: string
+          notifications_enabled?: boolean
           updated_at?: string
           user_id: string
           user_type: string
@@ -413,7 +591,9 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          fcm_token?: string | null
           id?: string
+          notifications_enabled?: boolean
           updated_at?: string
           user_id?: string
           user_type?: string

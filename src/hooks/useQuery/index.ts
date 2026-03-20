@@ -1,5 +1,5 @@
 /**
- * React Query hooks for InfluFlow
+ * React Query hooks for Influgal
  * 
  * These hooks use React Query for automatic caching, deduplication, and refetch management
  * Production configuration is in src/lib/queryClient.ts

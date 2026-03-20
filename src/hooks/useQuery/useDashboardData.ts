@@ -66,6 +66,7 @@ export interface DashboardData {
     created_at: string;
     campaigns: {
       id: string;
+      user_id: string;
       brand: string;
       brand_logo: string;
       city: string;
@@ -91,104 +92,6 @@ export interface DashboardData {
     brand_name: string;
   }>;
 }
-
-type RpcDashboardData = {
-  user_id: string;
-  influencer_profile: DashboardData['influencer_profile'];
-  brand_profile: {
-    id: string;
-    company_name?: string;
-    business_name?: string;
-    website: string | null;
-    verified?: boolean;
-  } | null;
-  campaigns: DashboardData['campaigns'];
-  applications_received: Array<{
-    id: string;
-    campaign_id: string;
-    user_id: string;
-    message: string;
-    status: string;
-    created_at: string;
-    influencer?: DashboardData['applications_received'][number]['influencer_profiles'];
-    influencer_profiles?: DashboardData['applications_received'][number]['influencer_profiles'];
-  }>;
-  my_applications: Array<{
-    id: string;
-    message: string;
-    status: string;
-    created_at: string;
-    campaign?: DashboardData['my_applications'][number]['campaigns'];
-    campaigns?: DashboardData['my_applications'][number]['campaigns'];
-  }>;
-  bookings: Array<{
-    id: string;
-    application_id?: string | null;
-    brand_user_id: string;
-    campaign_id?: string | null;
-    influencer_user_id: string;
-    influencer_profile_id: string;
-    items: Array<{ type: string; price: number; qty: number }>;
-    notes: string;
-    total_amount: number;
-    status: string;
-    created_at: string;
-    influencer_name?: string;
-    brand_name?: string;
-  }>;
-};
-
-const normalizeRpcDashboardData = (data: RpcDashboardData): DashboardData => ({
-  // Applications are the real source of truth for "applied" counts.
-  user_id: data.user_id,
-  influencer_profile: data.influencer_profile,
-  brand_profile: data.brand_profile
-    ? {
-        id: data.brand_profile.id,
-        company_name: data.brand_profile.company_name || data.brand_profile.business_name || '',
-        website: data.brand_profile.website,
-        verified: data.brand_profile.verified ?? false,
-      }
-    : null,
-  applications_received: (data.applications_received || []).map((application) => ({
-    id: application.id,
-    campaign_id: application.campaign_id,
-    user_id: application.user_id,
-    message: application.message,
-    status: application.status,
-    created_at: application.created_at,
-    influencer_profiles: application.influencer_profiles || application.influencer || null,
-  })),
-  campaigns: (data.campaigns || []).map((campaign) => ({
-    ...campaign,
-    influencers_applied: (data.applications_received || []).filter(
-      (application) => application.campaign_id === campaign.id
-    ).length,
-    deliverables: campaign.deliverables || [],
-  })),
-  my_applications: (data.my_applications || []).map((application) => ({
-    id: application.id,
-    message: application.message,
-    status: application.status,
-    created_at: application.created_at,
-    campaigns: application.campaigns || application.campaign || null,
-  })),
-  bookings: (data.bookings || []).map((booking) => ({
-    id: booking.id,
-    application_id: booking.application_id || null,
-    brand_user_id: booking.brand_user_id,
-    campaign_id: booking.campaign_id || null,
-    influencer_user_id: booking.influencer_user_id,
-    influencer_profile_id: booking.influencer_profile_id,
-    items: Array.isArray(booking.items) ? booking.items : [],
-    notes: booking.notes,
-    total_amount: booking.total_amount,
-    status: booking.status,
-    created_at: booking.created_at,
-    influencer_name: booking.influencer_name || 'Influencer',
-    brand_name: booking.brand_name || 'Brand',
-  })),
-});
 
 const buildDashboardFallback = async (userId: string): Promise<DashboardData> => {
   const [
@@ -223,6 +126,7 @@ const buildDashboardFallback = async (userId: string): Promise<DashboardData> =>
         created_at,
         campaigns (
           id,
+          user_id,
           brand,
           brand_logo,
           city,
@@ -376,74 +280,16 @@ const buildDashboardFallback = async (userId: string): Promise<DashboardData> =>
   };
 };
 
-const isMissingRpcError = (message: string) => {
-  const normalized = message.toLowerCase();
-  return normalized.includes('404') || normalized.includes('not found') || normalized.includes('could not find the function');
-};
-
-const DASHBOARD_RPC_MISSING_KEY = 'dashboard_rpc_missing';
-
-let dashboardRpcAvailable: boolean | null = null;
-
-const getDashboardRpcAvailability = () => {
-  if (dashboardRpcAvailable !== null) {
-    return dashboardRpcAvailable;
-  }
-
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const stored = window.sessionStorage.getItem(DASHBOARD_RPC_MISSING_KEY);
-  if (stored === 'true') {
-    dashboardRpcAvailable = false;
-    return false;
-  }
-
-  return null;
-};
-
-const markDashboardRpcMissing = () => {
-  dashboardRpcAvailable = false;
-  if (typeof window !== 'undefined') {
-    window.sessionStorage.setItem(DASHBOARD_RPC_MISSING_KEY, 'true');
-  }
-};
-
-const markDashboardRpcAvailable = () => {
-  dashboardRpcAvailable = true;
-  if (typeof window !== 'undefined') {
-    window.sessionStorage.removeItem(DASHBOARD_RPC_MISSING_KEY);
-  }
-};
-
 export const useDashboardData = (userId: string | null | undefined) => {
   return useQuery<DashboardData, Error>({
     queryKey: ['dashboard', userId],
+    staleTime: 0,
+    refetchOnMount: 'always',
     queryFn: async () => {
       if (!userId) {
         throw new Error('userId is required');
       }
-
-      if (getDashboardRpcAvailability() === false) {
-        return buildDashboardFallback(userId);
-      }
-
-      const { data, error } = await (supabase as any).rpc('get_dashboard_data', {
-        p_user_id: userId,
-      });
-
-      if (error) {
-        if (isMissingRpcError(error.message || '')) {
-          markDashboardRpcMissing();
-          return buildDashboardFallback(userId);
-        }
-        throw new Error(error.message || 'Failed to fetch dashboard data');
-      }
-
-      markDashboardRpcAvailable();
-
-      return normalizeRpcDashboardData(data as RpcDashboardData);
+      return buildDashboardFallback(userId);
     },
     enabled: !!userId,
   });

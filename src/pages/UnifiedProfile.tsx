@@ -22,13 +22,65 @@ import {
   UserCircle2,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import BookingModal from "@/components/BookingModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import ReviewList from "@/components/ReviewList";
-import { getReviewsForInfluencer, getPortfolioForInfluencer } from "@/data/profileData";
+import type { Database } from "@/integrations/supabase/types";
+
+type ReviewRow = Database["public"]["Tables"]["reviews"]["Row"];
+type BookingRow = Database["public"]["Tables"]["bookings"]["Row"];
+type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
+type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
+type BrandProfileRow = Database["public"]["Tables"]["brand_profiles"]["Row"];
+type PortfolioItemRow = Database["public"]["Tables"]["portfolio_items"]["Row"];
+
+type ReviewSummary = {
+  average: string;
+  count: number;
+  distribution: Array<{ star: number; count: number; pct: number }>;
+};
+
+type CollaborationItem = Pick<CampaignRow, "id" | "brand" | "description" | "niche" | "city" | "budget" | "deliverables" | "status">;
+
+const emptyReviewSummary: ReviewSummary = {
+  average: "0.0",
+  count: 0,
+  distribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: 0, pct: 0 })),
+};
+
+const formatFollowerCount = (value: string | number | null | undefined) => {
+  if (value == null) return "0";
+  const raw = typeof value === "number" ? value.toString() : value.trim();
+  if (!raw) return "0";
+  if (/[kKmM]$/.test(raw)) return raw.toUpperCase();
+
+  const numeric = Number(raw.replace(/,/g, ""));
+  if (Number.isNaN(numeric)) return raw;
+  if (numeric >= 1_000_000) return `${(numeric / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (numeric >= 1_000) return `${(numeric / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return numeric.toString();
+};
+
+const createReviewSummary = (reviews: ReviewRow[]): ReviewSummary => {
+  if (reviews.length === 0) return emptyReviewSummary;
+
+  const average = (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1);
+  const distribution = [5, 4, 3, 2, 1].map((star) => {
+    const count = reviews.filter((review) => review.rating === star).length;
+    return {
+      star,
+      count,
+      pct: (count / reviews.length) * 100,
+    };
+  });
+
+  return { average, count: reviews.length, distribution };
+};
 
 const platformIcon = (platform: string, size = 16) => {
   if (platform === "Instagram") return <Instagram size={size} />;
@@ -52,6 +104,18 @@ const contentTypeIcon = (type: string) => {
   }
 };
 
+const isGeneratedPortfolioTitle = (item: PortfolioItemRow) => {
+  if (!item.description) return false;
+
+  const normalizedTitle = item.title.trim().replace(/\.\.\.$/, "").toLowerCase();
+  const normalizedDescription = item.description.trim().toLowerCase();
+
+  return (
+    normalizedTitle === normalizedDescription ||
+    normalizedDescription.startsWith(normalizedTitle)
+  );
+};
+
 const UnifiedProfile = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -60,14 +124,18 @@ const UnifiedProfile = () => {
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>("influencer");
-  const [influencer, setInfluencer] = useState<any>(null);
-  const [brand, setBrand] = useState<any>(null);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [influencer, setInfluencer] = useState<InfluencerProfileRow | null>(null);
+  const [brand, setBrand] = useState<BrandProfileRow | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [isOwner, setIsOwner] = useState(false);
+  const [reviewSummary, setReviewSummary] = useState<ReviewSummary>(emptyReviewSummary);
+  const [collaborations, setCollaborations] = useState<CollaborationItem[]>([]);
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItemRow[]>([]);
 
   const isInfluencerRoute = location.pathname.includes("/influencer/");
   const isBrandRoute = location.pathname.includes("/brand/");
   const requestedTab = searchParams.get("tab");
+  const profileBackTo = `${location.pathname}${location.search}`;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -118,6 +186,9 @@ const UnifiedProfile = () => {
 
         setInfluencer(infRes.data);
         setBrand(brandRes.data);
+        setReviewSummary(emptyReviewSummary);
+        setCollaborations([]);
+        setPortfolioItems([]);
 
         const nextCampaigns = campRes.data || [];
         if (nextCampaigns.length > 0) {
@@ -141,6 +212,48 @@ const UnifiedProfile = () => {
         } else {
           setCampaigns([]);
         }
+
+        if (infRes.data) {
+          const [reviewsRes, bookingsRes, portfolioRes] = await Promise.all([
+            supabase.from("reviews").select("*").eq("reviewee_id", infRes.data.user_id).order("created_at", { ascending: false }),
+            supabase
+              .from("bookings")
+              .select("*")
+              .eq("influencer_profile_id", infRes.data.id)
+              .order("created_at", { ascending: false })
+              .limit(12),
+            supabase
+              .from("portfolio_items")
+              .select("*")
+              .eq("influencer_profile_id", infRes.data.id)
+              .order("sort_order", { ascending: true })
+              .order("created_at", { ascending: false }),
+          ]);
+
+          const reviewRows = (reviewsRes.data || []) as ReviewRow[];
+          const bookingRows = (bookingsRes.data || []) as BookingRow[];
+          const portfolioRows = (portfolioRes.data || []) as PortfolioItemRow[];
+          setReviewSummary(createReviewSummary(reviewRows));
+          setPortfolioItems(portfolioRows);
+
+          const campaignIds = Array.from(
+            new Set(
+              [
+                ...reviewRows.map((review) => review.campaign_id),
+                ...bookingRows.map((booking) => booking.campaign_id).filter(Boolean),
+              ].filter(Boolean)
+            )
+          ) as string[];
+
+          if (campaignIds.length > 0) {
+            const { data: collaborationCampaigns } = await supabase
+              .from("campaigns")
+              .select("id, brand, description, niche, city, budget, deliverables, status")
+              .in("id", campaignIds);
+
+            setCollaborations(((collaborationCampaigns || []) as CollaborationItem[]).slice(0, 12));
+          }
+        }
       } catch (err) {
         console.error("Error fetching unified profile:", err);
       } finally {
@@ -149,7 +262,7 @@ const UnifiedProfile = () => {
     };
 
     if (id) fetchData();
-  }, [id, user?.id, isInfluencerRoute, isBrandRoute]);
+  }, [id, user?.id, isInfluencerRoute, isBrandRoute, requestedTab]);
 
   if (loading) {
     return (
@@ -172,7 +285,13 @@ const UnifiedProfile = () => {
 
   return (
     <div className="min-h-screen bg-white pb-12">
-      {!user && <Navbar variant="minimal" title="Profile" />}
+      {user ? (
+        <div className="md:hidden">
+          <Navbar variant="minimal" title="Profile" />
+        </div>
+      ) : (
+        <Navbar variant="minimal" title="Profile" />
+      )}
 
       {isOwner && hasBothProfiles && (
         <div className="container px-4 pt-4 md:px-6">
@@ -200,9 +319,16 @@ const UnifiedProfile = () => {
       )}
 
       {activeTab === "influencer" && influencer ? (
-        <InfluencerView influencer={influencer} isOwner={isOwner} />
+        <InfluencerView
+          influencer={influencer}
+          isOwner={isOwner}
+          reviewSummary={reviewSummary}
+          collaborations={collaborations}
+          portfolioItems={portfolioItems}
+          profileBackTo={profileBackTo}
+        />
       ) : brand ? (
-        <BrandView brand={brand} campaigns={campaigns} isOwner={isOwner} />
+        <BrandView brand={brand} campaigns={campaigns} isOwner={isOwner} profileBackTo={profileBackTo} />
       ) : (
         <div className="container py-20 text-center">
           <h1 className="text-2xl font-bold">Profile not found</h1>
@@ -215,11 +341,30 @@ const UnifiedProfile = () => {
   );
 };
 
-const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boolean }) => {
+const InfluencerView = ({
+  influencer,
+  isOwner,
+  reviewSummary,
+  collaborations,
+  portfolioItems,
+  profileBackTo,
+}: {
+  influencer: InfluencerProfileRow;
+  isOwner: boolean;
+  reviewSummary: ReviewSummary;
+  collaborations: CollaborationItem[];
+  portfolioItems: PortfolioItemRow[];
+  profileBackTo: string;
+}) => {
   const navigate = useNavigate();
+  const { user, brandId } = useAuth();
+  const [bookingOpen, setBookingOpen] = useState(false);
   const initials = influencer.name.split(" ").map((n: string) => n[0]).join("").toUpperCase();
-  const reviews = getReviewsForInfluencer(influencer.id);
-  const portfolio = getPortfolioForInfluencer(influencer.id);
+  const verifiedSocials = [
+    influencer.instagram_url ? { label: "Instagram", href: influencer.instagram_url, icon: <Instagram size={18} className="text-pink-500" /> } : null,
+    influencer.youtube_url ? { label: "YouTube", href: influencer.youtube_url, icon: <Youtube size={18} className="text-red-500" /> } : null,
+    influencer.twitter_url ? { label: "X (Twitter)", href: influencer.twitter_url, icon: <Twitter size={18} className="text-sky-500" /> } : null,
+  ].filter(Boolean) as Array<{ label: string; href: string; icon: JSX.Element }>;
 
   return (
     <div>
@@ -230,7 +375,7 @@ const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boo
               <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
                 <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">Profile Info</h3>
                 <div className="space-y-3">
-                  <div className="flex flex-col gap-4 sm:flex-row">
+                  <div className="flex flex-row gap-4 sm:flex-row">
                     <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
                       {influencer.avatar_url ? (
                         <img src={influencer.avatar_url} alt={influencer.name} className="h-full w-full object-cover" />
@@ -262,10 +407,10 @@ const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boo
                         <Badge variant="outline" className="h-6 rounded-md border-slate-200 bg-slate-50 px-2.5 text-[11px] font-semibold text-slate-600">
                           {influencer.niche}
                         </Badge>
-                        {influencer.platforms?.map((platform: string) => (
+                        {verifiedSocials.map((platform) => (
                           <Badge key={platform} variant="outline" className="h-6 rounded-md border-slate-200 bg-white px-2.5 text-[11px] text-slate-600">
-                            <span className="mr-1">{platformIcon(platform, 12)}</span>
-                            {platform}
+                            <span className="mr-1">{platformIcon(platform.label === "X (Twitter)" ? "Twitter" : platform.label, 12)}</span>
+                            {platform.label}
                           </Badge>
                         ))}
                       </div>
@@ -276,25 +421,87 @@ const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boo
                       {influencer.bio || "No bio provided."}
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
-                    <StatCard label="Followers" value={`${(influencer.followers / 1000).toFixed(1)}K`} />
+                  <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
+                    <StatCard label="Followers" value={formatFollowerCount(influencer.followers)} />
                     <StatCard label="Engagement" value={`${influencer.engagement_rate || "4.5"}%`} />
                     <StatCard label="Campaigns" value={String(influencer.completed_campaigns || 0)} />
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Verification</p>
+                        <p className="mt-1 text-sm font-medium text-slate-900">
+                          {verifiedSocials.length > 0 ? "Social accounts connected" : "Social accounts not connected"}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          {verifiedSocials.length > 0
+                            ? `${verifiedSocials.length} verified platform${verifiedSocials.length > 1 ? "s" : ""} visible on your profile.`
+                            : isOwner
+                            ? "Verify at least one social account to show platforms, audience stats, and trust signals."
+                            : "This creator has not connected any verified social accounts yet."}
+                        </p>
+                      </div>
+                      <div className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        verifiedSocials.length > 0
+                          ? "bg-teal-50 text-teal-700"
+                          : "bg-slate-200 text-slate-600"
+                      }`}>
+                        {verifiedSocials.length > 0 ? `${verifiedSocials.length} linked` : "Not verified"}
+                      </div>
+                    </div>
+                    {isOwner && (
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="mt-2 h-auto p-0 text-xs font-semibold text-teal-700"
+                        onClick={() => navigate("/edit-profile?section=verification")}
+                      >
+                        {verifiedSocials.length > 0 ? "Manage verification" : "Verify socials"}
+                      </Button>
+                    )}
                   </div>
                   <div className="border-t border-slate-100 pt-4">
                     <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Service Pricing</h3>
                     <div className="mb-5 space-y-3">
-                      <PriceRow icon={<Film size={16} />} label="Instagram Reel" value={influencer.price_reel} tone="teal" />
-                      <PriceRow icon={<Play size={16} />} label="Instagram Story" value={influencer.price_story} tone="amber" />
+                      <PriceRow icon={<Film size={16} />} label="Reel Promotion" value={influencer.price_reel} tone="teal" />
+                      <PriceRow icon={<Play size={16} />} label="Story Promotion" value={influencer.price_story} tone="amber" />
+                      <PriceRow icon={<MapPin size={16} />} label="Visit & Review" value={influencer.price_visit} tone="slate" />
                     </div>
 
                     {isOwner ? (
                       <Button className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800" onClick={() => navigate("/edit-profile")}>
                         Edit Your Profile
                       </Button>
+                    ) : !user ? (
+                      <Button
+                        className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
+                        onClick={() => navigate("/auth")}
+                      >
+                        Sign In to Book
+                      </Button>
+                    ) : !brandId ? (
+                      <div className="space-y-2">
+                        <Button
+                          className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
+                          onClick={() => navigate("/register-brand")}
+                        >
+                          Join as Brand to Book
+                        </Button>
+                        <p className="text-xs text-slate-500">
+                          Direct bookings are available for brand accounts.
+                        </p>
+                      </div>
                     ) : (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
-                        Booking happens after campaign acceptance.
+                      <div className="space-y-2">
+                        <Button
+                          className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
+                          onClick={() => setBookingOpen(true)}
+                        >
+                          Book This Influencer
+                        </Button>
+                        <p className="text-xs text-slate-500">
+                          Send a direct booking request using this creator&apos;s public rate card.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -302,39 +509,37 @@ const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boo
               </div>
             </div>
 
-            {influencer.is_verified && (influencer.instagram_url || influencer.youtube_url || influencer.twitter_url) && (
+            {influencer.is_verified && verifiedSocials.length > 0 && (
               <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
                 <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">Connected Accounts</h3>
                 <div className="space-y-2.5">
-                  {influencer.instagram_url && <PlainSocialLink href={influencer.instagram_url} label="Instagram" icon={<Instagram size={18} className="text-slate-400 transition-colors group-hover:text-pink-500" />} />}
-                  {influencer.youtube_url && <PlainSocialLink href={influencer.youtube_url} label="YouTube" icon={<Youtube size={18} className="text-slate-400 transition-colors group-hover:text-red-500" />} />}
-                  {influencer.twitter_url && <PlainSocialLink href={influencer.twitter_url} label="Twitter" icon={<Twitter size={18} className="text-slate-400 transition-colors group-hover:text-sky-500" />} />}
+                  {verifiedSocials.map((social) => (
+                    <PlainSocialLink
+                      key={social.label}
+                      href={social.href}
+                      label={social.label}
+                      icon={social.label === "Instagram"
+                        ? <Instagram size={18} className="text-slate-400 transition-colors group-hover:text-pink-500" />
+                        : social.label === "YouTube"
+                          ? <Youtube size={18} className="text-slate-400 transition-colors group-hover:text-red-500" />
+                          : <Twitter size={18} className="text-slate-400 transition-colors group-hover:text-sky-500" />}
+                    />
+                  ))}
                 </div>
               </div>
             )}
           </div>
 
           <div className="space-y-5 lg:col-span-7">
-            <section className="rounded-2xl border border-slate-200/60 bg-slate-50/70 p-4">
-              <h2 className="text-base font-semibold text-slate-900">Creator Overview</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                Browse verified socials, featured work, and client feedback to get a quick sense of this creator's style and fit.
-              </p>
-            </section>
+            
 
-            {influencer.is_verified && (influencer.instagram_url || influencer.youtube_url || influencer.twitter_url) && (
+            {influencer.is_verified && verifiedSocials.length > 0 && (
               <section>
               <h2 className="mb-3 text-base font-semibold text-slate-900">Verified Socials</h2>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {influencer.instagram_url && (
-                    <SocialLink href={influencer.instagram_url} label="Instagram" icon={<Instagram size={18} className="text-pink-500" />} />
-                  )}
-                  {influencer.youtube_url && (
-                    <SocialLink href={influencer.youtube_url} label="YouTube" icon={<Youtube size={18} className="text-red-500" />} />
-                  )}
-                  {influencer.twitter_url && (
-                    <SocialLink href={influencer.twitter_url} label="X (Twitter)" icon={<Twitter size={18} className="text-sky-500" />} />
-                  )}
+                  {verifiedSocials.map((social) => (
+                    <SocialLink key={social.label} href={social.href} label={social.label} icon={social.icon} />
+                  ))}
                 </div>
               </section>
             )}
@@ -342,42 +547,216 @@ const InfluencerView = ({ influencer, isOwner }: { influencer: any; isOwner: boo
             <Tabs defaultValue="portfolio" className="w-full">
               <TabsList className="mb-4 h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 whitespace-nowrap">
                 <TabsTrigger value="portfolio" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
-                  Work Portfolio ({portfolio.length})
+                  Portfolio ({portfolioItems.length})
+                </TabsTrigger>
+                <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
+                  Campaign History ({collaborations.length})
                 </TabsTrigger>
                 <TabsTrigger value="reviews" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
-                  Client Reviews ({reviews.length})
+                  Client Reviews ({reviewSummary.count})
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="portfolio" className="m-0">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {portfolio.map((item) => (
-                    <div key={item.id} className="group cursor-pointer">
-                      <div className="relative mb-2 aspect-[16/10] overflow-hidden rounded-xl border border-slate-200/60 bg-slate-100">
-                        <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                        <div className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                          {contentTypeIcon(item.type)}
-                        </div>
-                      </div>
-                      <h4 className="text-sm font-semibold text-slate-900 transition-colors group-hover:text-teal-600">{item.title}</h4>
-                      <p className="mt-0.5 text-[11px] uppercase tracking-wide text-slate-400">{item.platform}</p>
-                    </div>
-                  ))}
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Portfolio Highlights</h3>
+                    <p className="text-xs text-slate-500">
+                      Browse published creator work, media uploads, and featured collaborations.
+                    </p>
+                  </div>
+                  {isOwner && (
+                    <Button
+                      type="button"
+                      className="rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
+                      onClick={() => navigate("/edit-profile?section=portfolio")}
+                    >
+                      Add Portfolio Item
+                    </Button>
+                  )}
                 </div>
+
+                {portfolioItems.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {portfolioItems.map((item) => (
+                      <a
+                        key={item.id}
+                        href={item.external_url || item.media_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-teal-200 hover:bg-teal-50/40"
+                      >
+                        <div className="aspect-[16/10] overflow-hidden bg-slate-100">
+                          {["video", "reel", "story"].includes(item.media_type) ? (
+                            <video
+                              src={item.media_url}
+                              poster={item.thumbnail_url || undefined}
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_rgba(241,245,249,0.95))] p-3">
+                              <img
+                                src={item.thumbnail_url || item.media_url}
+                                alt={item.title}
+                                className="max-h-full max-w-full rounded-lg object-contain shadow-sm transition-transform duration-300 group-hover:scale-[1.03]"
+                                loading="lazy"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-3 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                {item.platform || "Portfolio"}
+                              </p>
+                              {!isGeneratedPortfolioTitle(item) && (
+                                <h4 className="mt-1 text-sm font-semibold text-slate-900 transition-colors group-hover:text-teal-700">
+                                  {item.title}
+                                </h4>
+                              )}
+                            </div>
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                              {contentTypeIcon(item.media_type)}
+                            </div>
+                          </div>
+                          {item.description && <p className="text-xs leading-5 text-slate-500">{item.description}</p>}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center">
+                    <p className="text-sm font-medium text-slate-500">No creator portfolio items published yet.</p>
+                    {isOwner && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-4 rounded-xl"
+                        onClick={() => navigate("/edit-profile?section=portfolio")}
+                      >
+                        Upload Your First Portfolio Item
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="history" className="m-0">
+                {collaborations.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {collaborations.map((item) => (
+                      <Link key={item.id} to={`/campaign/${item.id}`} state={{ backTo: profileBackTo }} className="group">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:bg-teal-50/40">
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.brand}</p>
+                              <h4 className="mt-1 text-sm font-semibold text-slate-900 transition-colors group-hover:text-teal-700">
+                                {item.description}
+                              </h4>
+                            </div>
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                              {contentTypeIcon(item.deliverables?.[0]?.toLowerCase() || "post")}
+                            </div>
+                          </div>
+
+                          <div className="mb-3 flex flex-wrap gap-2">
+                            <MiniBadge label={item.niche} />
+                            <MiniBadge label={item.city} />
+                            <MiniBadge label={`Rs. ${item.budget.toLocaleString()}`} />
+                          </div>
+
+                          <p className="text-xs text-slate-500">
+                            {(item.deliverables || []).length > 0
+                              ? `Deliverables: ${item.deliverables.join(", ")}`
+                              : "Deliverables not specified."}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center">
+                    <p className="text-sm font-medium text-slate-500">No completed collaborations to show yet.</p>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="reviews" className="m-0">
-                <ReviewList reviews={reviews} />
+                <div className="space-y-4">
+                  <Card className="border-slate-200/60 shadow-sm">
+                    <CardContent className="grid gap-4 p-5 md:grid-cols-[180px_1fr] md:items-center">
+                      <div className="text-center">
+                        <div className="font-display text-4xl font-bold text-slate-900">{reviewSummary.average}</div>
+                        <div className="mt-1 flex items-center justify-center gap-0.5">
+                          {[...Array(5)].map((_, index) => (
+                            <Star
+                              key={index}
+                              size={14}
+                              className={index < Math.round(Number(reviewSummary.average)) ? "fill-amber-400 text-amber-400" : "text-slate-200"}
+                            />
+                          ))}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">{reviewSummary.count} real reviews</div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {reviewSummary.distribution.map((item) => (
+                          <div key={item.star} className="flex items-center gap-3 text-xs">
+                            <span className="w-4 text-slate-500">{item.star}</span>
+                            <Star size={10} className="fill-amber-400 text-amber-400" />
+                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                              <div className="h-full rounded-full bg-amber-400" style={{ width: `${item.pct}%` }} />
+                            </div>
+                            <span className="w-6 text-right text-slate-500">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <ReviewList userId={influencer.user_id} />
+                </div>
               </TabsContent>
             </Tabs>
           </div>
         </div>
+
+        {!isOwner && (
+          <BookingModal
+            influencer={{
+              id: influencer.id,
+              name: influencer.name,
+              city: influencer.city,
+              niche: influencer.niche,
+              price_reel: influencer.price_reel,
+              price_story: influencer.price_story,
+              price_visit: influencer.price_visit,
+            }}
+            influencerUserId={influencer.user_id}
+            isOpen={bookingOpen}
+            onClose={() => setBookingOpen(false)}
+          />
+        )}
       </div>
     </div>
   );
 };
 
-const BrandView = ({ brand, campaigns, isOwner }: { brand: any; campaigns: any[]; isOwner: boolean }) => {
+const BrandView = ({
+  brand,
+  campaigns,
+  isOwner,
+  profileBackTo,
+}: {
+  brand: BrandProfileRow;
+  campaigns: CampaignRow[];
+  isOwner: boolean;
+  profileBackTo: string;
+}) => {
   const navigate = useNavigate();
   const initials = brand.business_name.split(" ").map((n: string) => n[0]).join("").toUpperCase();
   const targetNiches = brand.target_niches || [];
@@ -390,8 +769,12 @@ const BrandView = ({ brand, campaigns, isOwner }: { brand: any; campaigns: any[]
           <div className="grid grid-cols-1 gap-6 px-5 py-6 md:grid-cols-[1.2fr_0.8fr] md:px-6">
             <div>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl border border-white/15 bg-white/10 font-display text-2xl font-bold text-white/80">
-                  {initials}
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-white/15 bg-white/10 font-display text-2xl font-bold text-white/80">
+                  {brand.logo_url ? (
+                    <img src={brand.logo_url} alt={brand.business_name} className="h-full w-full object-cover" />
+                  ) : (
+                    initials
+                  )}
                 </div>
 
                 <div className="min-w-0">
@@ -477,7 +860,7 @@ const BrandView = ({ brand, campaigns, isOwner }: { brand: any; campaigns: any[]
           </div>
 
           <div className="space-y-5 lg:col-span-8">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <InfoPanel
                   icon={<Target size={16} className="text-teal-600" />}
@@ -511,7 +894,7 @@ const BrandView = ({ brand, campaigns, isOwner }: { brand: any; campaigns: any[]
                   </div>
                 </InfoPanel>
               </div>
-            </section>
+            
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-2 text-lg font-semibold text-slate-900">About the Brand</h2>
@@ -542,33 +925,45 @@ const BrandView = ({ brand, campaigns, isOwner }: { brand: any; campaigns: any[]
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {campaigns.map((campaign) => (
-                  <Link key={campaign.id} to={`/campaign/${campaign.id}`} className="group">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 transition-all hover:border-teal-200 hover:bg-teal-50/40">
-                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{campaign.brand}</div>
-                          <h3 className="mt-1 line-clamp-2 text-base font-semibold text-slate-900 transition-colors group-hover:text-teal-700">
-                            {campaign.description}
-                          </h3>
-                        </div>
-                        <div className="w-fit rounded-xl bg-white px-2.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm">
-                          Rs. {campaign.budget.toLocaleString()}
-                        </div>
-                      </div>
+  <Link key={campaign.id} to={`/campaign/${campaign.id}`} state={{ backTo: profileBackTo }} className="group">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 transition-all hover:border-teal-200 hover:bg-teal-50/40">
+      
+      {/* Row 1: Title + Price */}
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {campaign.brand}
+          </div>
 
-                      <div className="mb-3 flex flex-wrap gap-2">
-                        <MiniBadge label={campaign.niche} />
-                        <MiniBadge label={campaign.city} />
-                        <MiniBadge label={`${campaign.influencers_needed} creators`} />
-                      </div>
+          
+        </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
-                        <CampaignMetric label="Applied" value={String(campaign.influencers_applied || 0)} />
-                        <CampaignMetric label="Need" value={String(campaign.influencers_needed || 0)} />
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+        <div className="shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm">
+          Rs. {campaign.budget.toLocaleString()}
+        </div>
+      </div>
+
+      {/* Row 2: Description */}
+      <p className="mb-3 line-clamp-2 text-sm text-slate-600 break-words">
+        {campaign.description}
+      </p>
+
+      {/* Row 3: Badges */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        <MiniBadge label={campaign.niche} />
+        <MiniBadge label={campaign.city} />
+        <MiniBadge label={`${campaign.influencers_needed} creators`} />
+      </div>
+
+      {/* Row 4: Metrics */}
+      <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
+        <CampaignMetric label="Applied" value={String(campaign.influencers_applied || 0)} />
+        <CampaignMetric label="Need" value={String(campaign.influencers_needed || 0)} />
+      </div>
+
+    </div>
+  </Link>
+))}
 
                 {campaigns.length === 0 && (
                   <div className="col-span-full rounded-2xl border border-dashed border-slate-200 py-12 text-center">
@@ -632,13 +1027,17 @@ const PriceRow = ({
   icon: React.ReactNode;
   label: string;
   value: number;
-  tone: "teal" | "amber";
+  tone: "teal" | "amber" | "slate";
 }) => (
   <div className="flex items-center justify-between">
     <div className="flex items-center gap-3">
       <div
         className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-          tone === "teal" ? "bg-teal-50 text-teal-600" : "bg-amber-50 text-amber-600"
+          tone === "teal"
+            ? "bg-teal-50 text-teal-600"
+            : tone === "amber"
+              ? "bg-amber-50 text-amber-600"
+              : "bg-slate-100 text-slate-600"
         }`}
       >
         {icon}

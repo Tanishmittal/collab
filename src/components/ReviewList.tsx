@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+type ReviewRow = Database["public"]["Tables"]["reviews"]["Row"];
 
 interface Review {
   id: string;
@@ -27,11 +30,7 @@ const ReviewList = ({ userId, refreshKey }: ReviewListProps) => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchReviews();
-  }, [userId, refreshKey]);
-
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("reviews")
@@ -40,25 +39,22 @@ const ReviewList = ({ userId, refreshKey }: ReviewListProps) => {
       .order("created_at", { ascending: false });
 
     if (data) {
-      // Enrich with reviewer names and campaign info
       const enriched = await Promise.all(
-        data.map(async (r: any) => {
-          // Get reviewer display name
+        ((data || []) as ReviewRow[]).map(async (review) => {
           const { data: profile } = await supabase
             .from("profiles")
             .select("display_name")
-            .eq("user_id", r.reviewer_id)
+            .eq("user_id", review.reviewer_id)
             .maybeSingle();
 
-          // Get campaign brand name
           const { data: campaign } = await supabase
             .from("campaigns")
             .select("brand")
-            .eq("id", r.campaign_id)
+            .eq("id", review.campaign_id)
             .maybeSingle();
 
           return {
-            ...r,
+            ...review,
             reviewer_name: profile?.display_name || "Anonymous",
             campaign_brand: campaign?.brand || "Campaign",
           };
@@ -67,7 +63,11 @@ const ReviewList = ({ userId, refreshKey }: ReviewListProps) => {
       setReviews(enriched);
     }
     setLoading(false);
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews, refreshKey]);
 
   if (loading) return null;
   if (reviews.length === 0) return null;

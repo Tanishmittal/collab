@@ -1,12 +1,13 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
-  BarChart3, MessageSquare, Search, UserCircle, Building2, 
+  BarChart3, MessageSquare, Search, UserCircle, Building2, Bell,
   Settings2, LogOut, ChevronRight, Star, Megaphone, PlusSquare
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { useNotifications } from "@/hooks/useNotifications";
 
 type NavItem = {
   label: string;
@@ -24,6 +25,7 @@ const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, influencerId, brandId, signOut } = useAuth();
+  const { unreadCount } = useNotifications(user?.id);
 
   const handleSignOut = async () => {
     await signOut();
@@ -35,7 +37,7 @@ const Sidebar = () => {
       label: "Primary",
       items: [{ label: "Discover", path: "/", icon: Search },
         { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
-        
+        { label: "Notifications", path: "/notifications", icon: Bell },
         { label: "Messages", path: "/messages", icon: MessageSquare },
       ]
     },
@@ -67,11 +69,13 @@ const Sidebar = () => {
     <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 z-40">
       {/* Logo Area */}
       <div className="p-6">
-        <Link to="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center shadow-lg shadow-teal-500/20">
-            <span className="text-white font-display font-bold text-lg">I</span>
-          </div>
-          <span className="font-display font-extrabold text-xl tracking-tight text-slate-900 group-hover:text-teal-600 transition-colors">InfluFlow</span>
+        <Link to="/" className="flex items-center gap-3 group">
+          <img
+            src="/influgal_icon.png"
+            alt="Influgal"
+            className="h-12 w-12 shrink-0 object-contain"
+          />
+          <span className="font-display font-extrabold text-[1.35rem] tracking-tight text-slate-900 group-hover:text-teal-600 transition-colors">Influgal</span>
         </Link>
       </div>
 
@@ -101,6 +105,11 @@ const Sidebar = () => {
                       isActive ? "text-teal-600" : "text-slate-400 group-hover:text-slate-600"
                     )} />
                     <span className="flex-1">{item.label}</span>
+                    {item.path === "/notifications" && unreadCount > 0 && (
+                      <span className="min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
                     {isActive && (
                       <div
                         className="absolute left-0 w-1 h-6 bg-teal-500 rounded-r-full"

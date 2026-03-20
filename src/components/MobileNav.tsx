@@ -14,6 +14,10 @@ const MobileNav = () => {
   const location = useLocation();
   const { user, influencerId, brandId } = useAuth();
 
+  if (location.pathname === "/register" || location.pathname === "/register-brand") {
+    return null;
+  }
+
   const navItems: NavItem[] = user
     ? [
         { label: "Home", icon: Home, path: "/" },

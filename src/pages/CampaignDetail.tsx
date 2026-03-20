@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, MapPin, Users, IndianRupee, Clock, CheckCircle, XCircle, MessageSquare, Send, Loader2
+  ArrowLeft, MapPin, Users, IndianRupee, Clock, CheckCircle, XCircle, MessageSquare, Send, Loader2, Star
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import ChatThread from "@/components/ChatThread";
 import BookingModal from "@/components/BookingModal";
 import ReviewForm from "@/components/ReviewForm";
+import BrandAvatar from "@/components/BrandAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +23,10 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { createNotification } from "@/lib/notifications";
+import { navigateToBrandProfile } from "@/lib/brandProfiles";
+import { goBackOr } from "@/lib/navigation";
+import { getCampaignEligibility, type CampaignEligibilityResult } from "@/lib/campaignEligibility";
 
 interface CampaignRow {
   id: string;
@@ -37,6 +43,11 @@ interface CampaignRow {
   description: string;
   created_at: string;
   expires_at?: string | null;
+  target_platforms?: string[];
+  min_followers?: number | null;
+  min_engagement_rate?: number | null;
+  verified_socials_only?: boolean;
+  portfolio_required?: boolean;
 }
 
 interface ApplicationRow {
@@ -57,6 +68,18 @@ interface ApplicationRow {
     rating: number | null;
   } | null;
 }
+
+type InfluencerEligibilityProfile = {
+  city: string;
+  niche: string;
+  followers: string;
+  engagement_rate: string | null;
+  platforms: string[];
+  is_verified: boolean;
+  price_reel: number;
+  price_story: number;
+  price_visit: number;
+};
 
 type BookingStatusRow = Pick<
   Database["public"]["Tables"]["bookings"]["Row"],
@@ -186,6 +209,8 @@ const CampaignDetail = () => {
   const { user, influencerId } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
 
   const [campaign, setCampaign] = useState<CampaignRow | null>(null);
   const [applications, setApplications] = useState<ApplicationRow[]>([]);
@@ -199,6 +224,8 @@ const CampaignDetail = () => {
   const [bookingStatusByApplication, setBookingStatusByApplication] = useState<Record<string, string>>({});
   const [applicationCount, setApplicationCount] = useState(0);
   const [acceptedCount, setAcceptedCount] = useState(0);
+  const [eligibilityProfile, setEligibilityProfile] = useState<InfluencerEligibilityProfile | null>(null);
+  const [hasPortfolio, setHasPortfolio] = useState(false);
 
   const isOwner = user && campaign && campaign.user_id === user.id;
 
@@ -293,6 +320,33 @@ const CampaignDetail = () => {
     fetchBookingStatuses();
   }, [fetchBookingStatuses]);
 
+  useEffect(() => {
+    const fetchEligibilityProfile = async () => {
+      if (!influencerId) {
+        setEligibilityProfile(null);
+        setHasPortfolio(false);
+        return;
+      }
+
+      const [{ data: profile }, { count }] = await Promise.all([
+        supabase
+          .from("influencer_profiles")
+          .select("city, niche, followers, engagement_rate, platforms, is_verified, price_reel, price_story, price_visit")
+          .eq("id", influencerId)
+          .maybeSingle(),
+        supabase
+          .from("portfolio_items")
+          .select("*", { count: "exact", head: true })
+          .eq("influencer_profile_id", influencerId),
+      ]);
+
+      setEligibilityProfile((profile as InfluencerEligibilityProfile | null) || null);
+      setHasPortfolio((count || 0) > 0);
+    };
+
+    fetchEligibilityProfile();
+  }, [influencerId]);
+
   const handleApply = async () => {
     if (!user) {
       toast({ title: "Please sign in", description: "You need to be logged in to apply.", variant: "destructive" });
@@ -305,6 +359,21 @@ const CampaignDetail = () => {
       return;
     }
     if (!campaign) return;
+
+    const eligibilityCheck = getCampaignEligibility(
+      {
+        city: campaign.city,
+        niche: campaign.niche,
+        deliverables: campaign.deliverables,
+        min_followers: campaign.min_followers ?? null,
+        min_engagement_rate: campaign.min_engagement_rate ?? null,
+        target_platforms: campaign.target_platforms ?? [],
+        verified_socials_only: campaign.verified_socials_only ?? false,
+        portfolio_required: campaign.portfolio_required ?? false,
+      },
+      eligibilityProfile,
+      hasPortfolio
+    );
 
     const campaignFull = acceptedCount >= campaign.influencers_needed;
     const campaignExpired = isCampaignExpired(campaign);
@@ -323,6 +392,15 @@ const CampaignDetail = () => {
       return;
     }
 
+    if (!eligibilityCheck.eligible) {
+      toast({
+        title: "You can't apply yet",
+        description: eligibilityCheck.reasons[0] || "Your profile does not match this campaign's requirements.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
     const { error } = await supabase.from("campaign_applications").insert({
       campaign_id: id!,
@@ -336,11 +414,21 @@ const CampaignDetail = () => {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
+      await createNotification({
+        userId: campaign.user_id,
+        type: "campaign_application_received",
+        title: "New campaign application",
+        body: `${user.user_metadata?.display_name || "A creator"} applied to ${campaign.brand}.`,
+        actionUrl: `/campaign/${campaign.id}`,
+        metadata: { campaignId: campaign.id, influencerProfileId: influencerId },
+      }).catch(() => undefined);
       toast({ title: "Application sent!", description: "The brand will review your application." });
       setApplyOpen(false);
       setApplyMessage("");
       setHasApplied(true);
       setApplicationCount((current) => current + 1);
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", user.id] });
+      await queryClient.invalidateQueries({ queryKey: ["campaign-applications", user.id] });
     }
   };
 
@@ -409,6 +497,15 @@ const CampaignDetail = () => {
         });
       }
 
+      await createNotification({
+        userId: application.user_id,
+        type: "campaign_application_accepted",
+        title: "Application accepted",
+        body: `Your application for ${campaign.brand} was accepted.`,
+        actionUrl: `/campaign/${campaign.id}`,
+        metadata: { campaignId: campaign.id, applicationId: application.id },
+      }).catch(() => undefined);
+
       setApplications((prev) => prev.map((a) => (a.id === appId ? { ...a, status } : a)));
       setAcceptedCount(nextAcceptedCount);
       if (nextCampaignStatus !== campaign.status) {
@@ -424,6 +521,14 @@ const CampaignDetail = () => {
       .update({ status })
       .eq("id", appId);
     if (!error) {
+      await createNotification({
+        userId: application.user_id,
+        type: "campaign_application_rejected",
+        title: "Application update",
+        body: `Your application for ${campaign.brand} was ${status}.`,
+        actionUrl: `/campaign/${campaign.id}`,
+        metadata: { campaignId: campaign.id, applicationId: application.id, status },
+      }).catch(() => undefined);
       setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
       toast({ title: `Application ${status}` });
     }
@@ -460,26 +565,60 @@ const CampaignDetail = () => {
   const campaignExpired = isCampaignExpired(campaign);
   const campaignFull = acceptedCount >= campaign.influencers_needed;
   const canApply = campaign.status === "active" && !campaignExpired && !campaignFull;
+  const eligibility: CampaignEligibilityResult | null = influencerId
+    ? getCampaignEligibility(
+        {
+          city: campaign.city,
+          niche: campaign.niche,
+          deliverables: campaign.deliverables,
+          min_followers: campaign.min_followers ?? null,
+          min_engagement_rate: campaign.min_engagement_rate ?? null,
+          target_platforms: campaign.target_platforms ?? [],
+          verified_socials_only: campaign.verified_socials_only ?? false,
+          portfolio_required: campaign.portfolio_required ?? false,
+        },
+        eligibilityProfile,
+        hasPortfolio
+      )
+    : null;
+  const backTo = (location.state as { backTo?: string } | null)?.backTo || "/?tab=campaigns";
+  const backLabel =
+    backTo === "/dashboard"
+      ? "Back to Dashboard"
+      : backTo.startsWith("/influencer/") || backTo.startsWith("/brand/")
+        ? "Back to Profile"
+        : "Back to Campaigns";
+  const openBrandProfile = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    await navigateToBrandProfile(navigate, campaign.user_id);
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar variant="minimal" title="Campaign" />
 
       <div className="container max-w-3xl py-8">
-        <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/")}>
-          <ArrowLeft size={16} className="mr-1" /> Back to Home
+        <Button variant="ghost" size="sm" className="mb-4 hidden md:inline-flex" onClick={() => goBackOr(navigate, backTo)}>
+          <ArrowLeft size={16} className="mr-1" /> {backLabel}
         </Button>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="glass-card">
             <CardContent className="p-6">
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center text-3xl">
-                  {campaign.brand_logo}
-                </div>
+                <button type="button" onClick={openBrandProfile} className="shrink-0">
+                  <BrandAvatar
+                    brand={campaign.brand}
+                    brandLogo={campaign.brand_logo}
+                    className="h-14 w-14 rounded-xl bg-muted"
+                    fallbackClassName="text-3xl"
+                  />
+                </button>
                 <div className="flex-1">
-                  <h1 className="font-display font-bold text-2xl text-foreground">{campaign.brand}</h1>
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm mt-1">
+                  <button type="button" onClick={openBrandProfile} className="text-left">
+                    <h1 className="font-display font-bold text-2xl text-foreground transition-colors hover:text-primary">{campaign.brand}</h1>
+                  </button>
+                  <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin size={14} /> {campaign.city}
                     <span className="mx-1">•</span>
                     <Clock size={14} /> {new Date(campaign.created_at).toLocaleDateString()}
@@ -494,6 +633,44 @@ const CampaignDetail = () => {
                 {campaign.deliverables.map(d => (
                   <Badge key={d} variant="outline">{d}</Badge>
                 ))}
+              </div>
+
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Creator Requirements</p>
+                    <p className="mt-1 text-sm text-slate-600">Built from the same profile information creators submit.</p>
+                  </div>
+                  {eligibility && (
+                    <Badge
+                      variant="outline"
+                      className={eligibility.eligible ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}
+                    >
+                      {eligibility.eligible ? "You match" : "Check fit"}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge variant="outline">{campaign.city}</Badge>
+                  <Badge variant="outline">{campaign.niche}</Badge>
+                  {(campaign.target_platforms || []).map((platform) => (
+                    <Badge key={platform} variant="outline">{platform}</Badge>
+                  ))}
+                  {campaign.min_followers ? <Badge variant="outline">{campaign.min_followers.toLocaleString()}+ followers</Badge> : null}
+                  {campaign.min_engagement_rate ? <Badge variant="outline">{campaign.min_engagement_rate}%+ engagement</Badge> : null}
+                  {campaign.verified_socials_only ? <Badge variant="outline">Verified socials only</Badge> : null}
+                  {campaign.portfolio_required ? <Badge variant="outline">Portfolio required</Badge> : null}
+                </div>
+                {eligibility && !eligibility.eligible && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                    <p className="font-semibold">Why you can't apply yet</p>
+                    <ul className="mt-1 space-y-1 text-xs">
+                      {eligibility.reasons.map((reason) => (
+                        <li key={reason}>• {reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4 mt-6">
@@ -542,6 +719,10 @@ const CampaignDetail = () => {
                   ) : !canApply ? (
                     <Button disabled className="w-full" variant="secondary">
                       <XCircle size={16} className="mr-2" /> Applications Closed
+                    </Button>
+                  ) : eligibility && !eligibility.eligible ? (
+                    <Button disabled className="w-full" variant="secondary">
+                      <XCircle size={16} className="mr-2" /> Not Eligible Yet
                     </Button>
                   ) : (
                     <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
@@ -681,10 +862,10 @@ const CampaignDetail = () => {
                                 >
                                   {profile?.name || "Unknown"}
                                 </Link>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                                   {profile?.city && <span className="flex items-center gap-0.5"><MapPin size={10} /> {profile.city}</span>}
                                   {profile?.followers && <span>• {profile.followers} followers</span>}
-                                  {profile?.rating && <span>• Star {profile.rating}</span>}
+                                  {profile?.rating && <span className="flex items-center gap-1"><Star size={10} className="fill-current" /> {profile.rating}</span>}
                                 </div>
                               </div>
                             </div>

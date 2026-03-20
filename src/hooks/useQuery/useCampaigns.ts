@@ -15,6 +15,11 @@ export interface Campaign {
   description: string;
   created_at: string;
   expires_at?: string | null;
+  target_platforms: string[];
+  min_followers?: number | null;
+  min_engagement_rate?: number | null;
+  verified_socials_only: boolean;
+  portfolio_required: boolean;
 }
 
 interface UseCampaignsOptions {

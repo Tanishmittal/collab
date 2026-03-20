@@ -1,11 +1,14 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import type { Campaign, Influencer } from "@/data/mockData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampaigns, useInfluencers } from "@/hooks/useQuery";
 import Hero from "@/components/home/Hero";
 import type { Database } from "@/integrations/supabase/types";
+import { getCampaignEligibility } from "@/lib/campaignEligibility";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 
 const CTASection = lazy(() => import("@/components/home/CTASection"));
 const DiscoverySection = lazy(() => import("@/components/home/DiscoverySection"));
@@ -17,7 +20,6 @@ const TestimonialsSection = lazy(() => import("@/components/home/TestimonialsSec
 
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
 type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
-
 const parseFollowers = (f: string) => {
   const num = parseFloat(f);
   if (f.includes("K")) return num * 1000;
@@ -66,12 +68,14 @@ const DeferredSection = ({
 
 const Index = () => {
   const { user, loading: authLoading, influencerId: ownInfluencerId, brandId: ownBrandId } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("all");
   const [selectedNiche, setSelectedNiche] = useState("all");
   const [sortBy, setSortBy] = useState("followers");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [eligibleOnly, setEligibleOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<"influencers" | "campaigns">("influencers");
   const [influencerPage, setInfluencerPage] = useState(0);
   const [campaignPage, setCampaignPage] = useState(0);
@@ -145,10 +149,39 @@ const Index = () => {
             postedAt: new Date(row.created_at).toLocaleDateString(),
             description: row.description || "",
             deadline: row.expires_at || undefined,
+            targetPlatforms: row.target_platforms || [],
+            minFollowers: row.min_followers,
+            minEngagementRate: row.min_engagement_rate,
+            verifiedSocialsOnly: row.verified_socials_only || false,
+            portfolioRequired: row.portfolio_required || false,
           }) as Campaign
       ),
     [campaignsData]
   );
+
+  const currentInfluencer = useMemo(
+    () => influencers.find((influencer) => influencer.id === ownInfluencerId) || null,
+    [influencers, ownInfluencerId]
+  );
+  const [hasPortfolio, setHasPortfolio] = useState(false);
+
+  useEffect(() => {
+    const loadPortfolioPresence = async () => {
+      if (!ownInfluencerId) {
+        setHasPortfolio(false);
+        return;
+      }
+
+      const { count } = await supabase
+        .from("portfolio_items")
+        .select("*", { count: "exact", head: true })
+        .eq("influencer_profile_id", ownInfluencerId);
+
+      setHasPortfolio((count || 0) > 0);
+    };
+
+    loadPortfolioPresence();
+  }, [ownInfluencerId]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -204,10 +237,85 @@ const Index = () => {
           campaign.description.toLowerCase().includes(searchQuery.toLowerCase());
         const matchCity = selectedCity === "all" || campaign.city === selectedCity;
         const matchNiche = selectedNiche === "all" || campaign.niche === selectedNiche;
-        return matchSearch && matchCity && matchNiche;
+        const matchEligibility =
+          !eligibleOnly ||
+          (currentInfluencer &&
+            getCampaignEligibility(
+              {
+                city: campaign.city,
+                niche: campaign.niche,
+                deliverables: campaign.deliverables,
+                min_followers: campaign.minFollowers ?? null,
+                min_engagement_rate: campaign.minEngagementRate ?? null,
+                target_platforms: campaign.targetPlatforms ?? [],
+                verified_socials_only: campaign.verifiedSocialsOnly ?? false,
+                portfolio_required: campaign.portfolioRequired ?? false,
+              },
+              {
+                city: currentInfluencer.city,
+                niche: currentInfluencer.niche,
+                followers: currentInfluencer.followers,
+                engagement_rate: String(currentInfluencer.engagementRate),
+                platforms: currentInfluencer.platforms,
+                is_verified: currentInfluencer.isVerified ?? false,
+                price_reel: currentInfluencer.priceReel,
+                price_story: currentInfluencer.priceStory,
+                price_visit: currentInfluencer.priceVisit,
+              },
+              hasPortfolio
+            ).eligible);
+
+        return matchSearch && matchCity && matchNiche && matchEligibility;
       }),
-    [searchQuery, selectedCity, selectedNiche, campaigns]
+    [searchQuery, selectedCity, selectedNiche, campaigns, eligibleOnly, currentInfluencer, hasPortfolio]
   );
+
+  const profileCompletionPrompt = useMemo(() => {
+    if (!user || !currentInfluencer) return null;
+
+    const relevantReasons = new Set<string>();
+
+    campaigns.forEach((campaign) => {
+      const result = getCampaignEligibility(
+        {
+          city: campaign.city,
+          niche: campaign.niche,
+          deliverables: campaign.deliverables,
+          min_followers: campaign.minFollowers ?? null,
+          min_engagement_rate: campaign.minEngagementRate ?? null,
+          target_platforms: campaign.targetPlatforms ?? [],
+          verified_socials_only: campaign.verifiedSocialsOnly ?? false,
+          portfolio_required: campaign.portfolioRequired ?? false,
+        },
+        {
+          city: currentInfluencer.city,
+          niche: currentInfluencer.niche,
+          followers: currentInfluencer.followers,
+          engagement_rate: String(currentInfluencer.engagementRate),
+          platforms: currentInfluencer.platforms,
+          is_verified: currentInfluencer.isVerified ?? false,
+          price_reel: currentInfluencer.priceReel,
+          price_story: currentInfluencer.priceStory,
+          price_visit: currentInfluencer.priceVisit,
+        },
+        hasPortfolio
+      );
+
+      result.reasons
+        .filter((reason) =>
+          reason === "Portfolio required." ||
+          reason === "Verified socials required." ||
+          reason === "Missing reel pricing." ||
+          reason === "Missing story pricing." ||
+          reason === "Missing visit pricing."
+        )
+        .forEach((reason) => relevantReasons.add(reason));
+    });
+
+    if (relevantReasons.size === 0) return null;
+
+    return Array.from(relevantReasons);
+  }, [campaigns, currentInfluencer, hasPortfolio, user]);
 
   return (
     <div className="min-h-screen bg-white text-gray-900 selection:bg-teal-500/30">
@@ -217,6 +325,33 @@ const Index = () => {
 
       {user ? (
         <Suspense fallback={<SectionSkeleton className="min-h-[640px]" />}>
+          {profileCompletionPrompt && activeTab === "campaigns" && (
+            <div className="container mb-4">
+              <div className="rounded-3xl border border-teal-200 bg-teal-50 px-5 py-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-teal-900">Complete your profile to unlock more campaigns</p>
+                    <p className="mt-1 text-sm text-teal-800/80">
+                      You're currently missing a few requirements brands are filtering on.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {profileCompletionPrompt.map((reason) => (
+                        <div key={reason} className="rounded-full border border-teal-200 bg-white px-3 py-1 text-xs font-medium text-teal-700">
+                          {reason}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    className="h-10 rounded-xl bg-teal-600 px-4 font-semibold text-white hover:bg-teal-700"
+                    onClick={() => navigate("/edit-profile?section=verification")}
+                  >
+                    Update Profile
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
           <DiscoverySection
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
@@ -230,6 +365,8 @@ const Index = () => {
             setActiveTab={setActiveTab}
             verifiedOnly={verifiedOnly}
             setVerifiedOnly={setVerifiedOnly}
+            eligibleOnly={eligibleOnly}
+            setEligibleOnly={setEligibleOnly}
             loading={influencersLoading || campaignsLoading}
             influencers={influencers}
             campaigns={campaigns}

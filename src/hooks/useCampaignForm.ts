@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
-const logoOptions = ["B", "C", "F", "M", "S", "T"];
 const deliverableOptions = ["Reel", "Story", "Post", "UGC Video"] as const;
 
 type DeliverableLabel = (typeof deliverableOptions)[number];
@@ -17,6 +17,11 @@ export interface CampaignFormData {
   influencersNeeded: string;
   description: string;
   deadline: Date | undefined;
+  targetPlatforms: string[];
+  minFollowers: string;
+  minEngagementRate: string;
+  verifiedSocialsOnly: boolean;
+  portfolioRequired: boolean;
 }
 
 export interface CampaignActivitySummary {
@@ -24,6 +29,8 @@ export interface CampaignActivitySummary {
   acceptedCount: number;
   bookingsCount: number;
 }
+
+type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
 
 export const useCampaignForm = (
   onSuccess?: () => void,
@@ -33,15 +40,21 @@ export const useCampaignForm = (
   const { user } = useAuth();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const [brandAvatar, setBrandAvatar] = useState<string | null>(null);
   const [form, setForm] = useState<CampaignFormData>({
     brand: "",
-    brandLogo: "B",
+    brandLogo: "",
     city: "",
     niche: "",
     budget: "",
     influencersNeeded: "",
     description: "",
     deadline: undefined,
+    targetPlatforms: [],
+    minFollowers: "",
+    minEngagementRate: "",
+    verifiedSocialsOnly: false,
+    portfolioRequired: false,
   });
   const [deliverableCounts, setDeliverableCounts] = useState<Record<DeliverableLabel, number>>({
     Reel: 0,
@@ -56,9 +69,35 @@ export const useCampaignForm = (
     bookingsCount: 0,
   });
 
-  const update = (field: keyof CampaignFormData, value: string | Date | undefined) => {
+  const update = (field: keyof CampaignFormData, value: string | string[] | boolean | Date | undefined) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const resolveBrandLogo = useCallback(
+    (brandName?: string) => brandAvatar || brandName?.trim().charAt(0).toUpperCase() || "B",
+    [brandAvatar]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+
+    const loadBrandAvatar = async () => {
+      const { data } = await supabase
+        .from("brand_profiles")
+        .select("logo_url")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const avatarUrl = data?.logo_url || null;
+      setBrandAvatar(avatarUrl);
+
+      if (avatarUrl) {
+        setForm((prev) => ({ ...prev, brandLogo: avatarUrl }));
+      }
+    };
+
+    loadBrandAvatar();
+  }, [user]);
 
   const updateDeliverable = (label: DeliverableLabel, delta: number) => {
     setDeliverableCounts((prev) => ({
@@ -96,7 +135,7 @@ export const useCampaignForm = (
     const { error } = await supabase.from("campaigns").insert({
       user_id: user.id,
       brand: form.brand.trim().slice(0, 100),
-      brand_logo: form.brandLogo,
+      brand_logo: resolveBrandLogo(form.brand),
       city: form.city,
       niche: form.niche,
       budget: parseInt(form.budget, 10),
@@ -104,6 +143,11 @@ export const useCampaignForm = (
       deliverables: campaignDeliverables,
       description: form.description.trim().slice(0, 1000),
       expires_at: form.deadline?.toISOString(),
+      target_platforms: form.targetPlatforms,
+      min_followers: form.minFollowers ? parseInt(form.minFollowers, 10) : null,
+      min_engagement_rate: form.minEngagementRate ? Number(form.minEngagementRate) : null,
+      verified_socials_only: form.verifiedSocialsOnly,
+      portfolio_required: form.portfolioRequired,
       status: "active",
     });
 
@@ -119,7 +163,7 @@ export const useCampaignForm = (
     onSuccess?.();
   };
 
-  const handleUpdate = async (originalCampaign: any) => {
+  const handleUpdate = async (originalCampaign: CampaignRow) => {
     if (!campaignId || !user) return;
 
     setSubmitting(true);
@@ -139,7 +183,7 @@ export const useCampaignForm = (
         .eq("campaign_id", campaignId)
         .eq("status", "accepted"),
       supabase
-        .from("bookings" as any)
+        .from("bookings")
         .select("*", { count: "exact", head: true })
         .eq("campaign_id", campaignId),
     ]);
@@ -167,7 +211,7 @@ export const useCampaignForm = (
 
     const updatePayload = {
       brand: form.brand.trim().slice(0, 100),
-      brand_logo: form.brandLogo,
+      brand_logo: resolveBrandLogo(form.brand),
       city: shouldLockTargeting ? originalCampaign?.city || form.city : form.city,
       niche: shouldLockTargeting ? originalCampaign?.niche || form.niche : form.niche,
       budget: shouldLockCommercial ? originalCampaign?.budget || parseInt(form.budget, 10) : parseInt(form.budget, 10),
@@ -177,6 +221,11 @@ export const useCampaignForm = (
       deliverables: shouldLockTargeting ? originalDeliverables : campaignDeliverables,
       description: form.description.trim().slice(0, 1000),
       expires_at: shouldLockTargeting ? originalCampaign?.expires_at || null : form.deadline?.toISOString() ?? null,
+      target_platforms: shouldLockTargeting ? originalCampaign?.target_platforms || form.targetPlatforms : form.targetPlatforms,
+      min_followers: form.minFollowers ? parseInt(form.minFollowers, 10) : null,
+      min_engagement_rate: form.minEngagementRate ? Number(form.minEngagementRate) : null,
+      verified_socials_only: form.verifiedSocialsOnly,
+      portfolio_required: form.portfolioRequired,
     };
 
     const { error } = await supabase
@@ -221,7 +270,7 @@ export const useCampaignForm = (
         .eq("campaign_id", id)
         .eq("status", "accepted"),
       supabase
-        .from("bookings" as any)
+        .from("bookings")
         .select("*", { count: "exact", head: true })
         .eq("campaign_id", id),
     ]);
@@ -234,13 +283,18 @@ export const useCampaignForm = (
     const parsed = parseDeliverables(data.deliverables);
     setForm({
       brand: data.brand || "",
-      brandLogo: data.brand_logo || "B",
+      brandLogo: brandAvatar || data.brand_logo || "",
       city: data.city || "",
       niche: data.niche || "",
       budget: String(data.budget || ""),
       influencersNeeded: String(data.influencers_needed || ""),
       description: data.description || "",
       deadline: data.expires_at ? new Date(data.expires_at) : undefined,
+      targetPlatforms: data.target_platforms || [],
+      minFollowers: data.min_followers ? String(data.min_followers) : "",
+      minEngagementRate: data.min_engagement_rate ? String(data.min_engagement_rate) : "",
+      verifiedSocialsOnly: data.verified_socials_only || false,
+      portfolioRequired: data.portfolio_required || false,
     });
     setDeliverableCounts(parsed.counts);
     setIncludeEventVisit(parsed.includeEventVisit);
@@ -268,7 +322,6 @@ export const useCampaignForm = (
     handleUpdate,
     loadCampaign,
     activitySummary,
-    logoOptions,
     deliverableOptions,
   };
 };

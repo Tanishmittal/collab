@@ -71,7 +71,7 @@ const FeaturesSection = () => (
           Everything You Need to <span className="text-teal-500">Win</span>
         </h2>
         <p className="text-gray-500 mt-4 max-w-2xl mx-auto text-lg leading-relaxed">
-          InfluFlow gives brands and creators the tools to discover, connect and grow all in one beautifully simple platform.
+          Influgal gives brands and creators the tools to discover, connect and grow all in one beautifully simple platform.
         </p>
       </motion.div>
 

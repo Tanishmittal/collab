@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, IndianRupee, Minus, Plus, ShoppingCart } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -6,13 +6,27 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import type { Influencer } from "@/data/mockData";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { createNotification } from "@/lib/notifications";
+
+interface BookingInfluencer {
+  id: string;
+  name: string;
+  city: string;
+  niche: string;
+  price_reel?: number | null;
+  price_story?: number | null;
+  price_visit?: number | null;
+  priceReel?: number | null;
+  priceStory?: number | null;
+  priceVisit?: number | null;
+}
 
 interface BookingModalProps {
-  influencer: any; // Using any for flexibility with snake_case/camelCase
+  influencer: BookingInfluencer;
   influencerUserId?: string;
   campaignId?: string;
   applicationId?: string;
@@ -25,6 +39,8 @@ interface BookingItem {
   price: number;
   qty: number;
 }
+
+type BookingStatusRow = Pick<Database["public"]["Tables"]["bookings"]["Row"], "status">;
 
 const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId, isOpen, onClose }: BookingModalProps) => {
   const { user } = useAuth();
@@ -40,32 +56,34 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
   const [existingBookingStatus, setExistingBookingStatus] = useState<string | null>(null);
 
   const bookingLocked = !!applicationId && existingBookingStatus !== null;
+  const isDirectBooking = !applicationId;
 
-  const checkExistingBooking = async () => {
+  const checkExistingBooking = useCallback(async () => {
     if (!applicationId || !isOpen) {
       setExistingBookingStatus(null);
       return;
     }
 
     const { data, error } = await supabase
-      .from("bookings" as any)
+      .from("bookings")
       .select("status")
       .eq("application_id", applicationId)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
-    if (!error && data?.status) {
-      setExistingBookingStatus(data.status);
+    const latestBooking = (data as BookingStatusRow[] | null)?.[0];
+
+    if (!error && latestBooking?.status) {
+      setExistingBookingStatus(latestBooking.status);
       return;
     }
 
     setExistingBookingStatus(null);
-  };
+  }, [applicationId, isOpen]);
 
   useEffect(() => {
     checkExistingBooking();
-  }, [applicationId, isOpen]);
+  }, [checkExistingBooking]);
 
   const updateQty = (index: number, delta: number) => {
     setItems(prev => prev.map((item, i) =>
@@ -92,7 +110,7 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
     }
 
     setSubmitting(true);
-    const { error } = await supabase.from("bookings" as any).insert({
+    const { error } = await supabase.from("bookings").insert({
       application_id: applicationId ?? null,
       brand_user_id: user.id,
       campaign_id: campaignId ?? null,
@@ -102,13 +120,22 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
       notes: notes.trim().slice(0, 500),
       total_amount: total,
       status: "pending",
-    } as any);
+    });
     setSubmitting(false);
 
     if (error) {
       toast({ title: "Booking failed", description: error.message, variant: "destructive" });
       return;
     }
+
+    await createNotification({
+      userId: influencerUserId,
+      type: "booking_created",
+      title: "New booking request",
+      body: `${user.user_metadata?.display_name || "A brand"} sent you a booking request.`,
+      actionUrl: campaignId ? `/campaign/${campaignId}` : "/dashboard",
+      metadata: { campaignId, applicationId, influencerProfileId: influencer.id },
+    }).catch(() => undefined);
 
     setStep("done");
     toast({ title: "Booking request sent!" });
@@ -131,7 +158,7 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display">
-            {step === "done" ? "Booking Confirmed!" : `Book ${influencer.name}`}
+            {step === "done" ? "Booking Request Sent!" : `Book ${influencer.name}`}
           </DialogTitle>
         </DialogHeader>
 
@@ -176,7 +203,24 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
                 ))}
               </div>
 
-              <div><Label className="text-xs">Notes for the influencer</Label><Textarea placeholder="Any specific requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="mt-1 text-sm" rows={2} maxLength={500} disabled={bookingLocked} /></div>
+              <div>
+                <Label className="text-xs">Notes for the influencer</Label>
+                <Textarea
+                  placeholder="Any specific requirements..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  className="mt-1 text-sm"
+                  rows={2}
+                  maxLength={500}
+                  disabled={bookingLocked}
+                />
+              </div>
+
+              {isDirectBooking && (
+                <p className="text-xs text-muted-foreground">
+                  This sends a direct booking request using the creator&apos;s public rate card.
+                </p>
+              )}
 
               <Separator />
 
@@ -207,11 +251,11 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
                 </div>
               </div>
               {notes && <div className="p-3 rounded-lg border text-sm text-muted-foreground"><span className="font-medium text-foreground">Notes:</span> {notes}</div>}
-              <p className="text-xs text-muted-foreground">Payment will be held in escrow until the influencer delivers the content and you approve it.</p>
+              <p className="text-xs text-muted-foreground">{isDirectBooking ? "Review the scope and total before sending your direct booking request." : "Review the scope and total before confirming this campaign booking."}</p>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setStep("select")}>Back</Button>
                 <Button className="flex-1 gradient-primary border-0 text-primary-foreground" onClick={handleConfirm} disabled={submitting}>
-                  {submitting ? "Sending..." : "Confirm & Pay"}
+                  {submitting ? "Sending..." : "Send Booking Request"}
                 </Button>
               </div>
             </motion.div>
@@ -227,7 +271,7 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
                 <p className="text-sm text-muted-foreground mt-1">{influencer.name} will review your request and respond shortly.</p>
               </div>
               <div className="p-3 rounded-lg bg-muted/50 text-sm">
-                <span className="text-muted-foreground">Amount in escrow: </span>
+                <span className="text-muted-foreground">Request total: </span>
                 <span className="font-semibold text-foreground">Rs. {(total || 0).toLocaleString()}</span>
               </div>
               <Button className="w-full" variant="outline" onClick={handleClose}>Done</Button>
@@ -240,3 +284,4 @@ const BookingModal = ({ influencer, influencerUserId, campaignId, applicationId,
 };
 
 export default BookingModal;
+

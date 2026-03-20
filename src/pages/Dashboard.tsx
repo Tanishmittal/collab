@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
+import type { NavigateFunction } from "react-router-dom";
 import {
   BarChart3, Users, IndianRupee, Plus, MapPin, Clock,
   CheckCircle, XCircle, MessageSquare, Send, Trash2, Pause, Play, Archive, ShoppingCart, Hourglass, Pencil,
@@ -26,8 +27,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useDashboardData } from "@/hooks/useQuery";
 import InfluencerProfileModal from "@/components/InfluencerProfileModal";
-import ListInfluencerModal from "@/components/ListInfluencerModal";
-import JoinBrandModal from "@/components/JoinBrandModal";
+import BrandAvatar from "@/components/BrandAvatar";
+import { createNotification } from "@/lib/notifications";
+import { navigateToBrandProfile } from "@/lib/brandProfiles";
+import type { Database, Json } from "@/integrations/supabase/types";
 
 interface CampaignRow {
   id: string; user_id: string; brand: string; brand_logo: string; city: string;
@@ -47,7 +50,7 @@ interface ApplicationRow {
 interface MyApplicationRow {
   id: string; message: string; status: string; created_at: string;
   campaigns: {
-    id: string; brand: string; brand_logo: string; city: string;
+    id: string; user_id: string; brand: string; brand_logo: string; city: string;
     budget: number; niche: string; description: string; status: string;
   } | null;
 }
@@ -58,6 +61,39 @@ interface BookingRow {
   notes: string; total_amount: number; status: string; created_at: string;
   influencer_name?: string; brand_name?: string;
 }
+
+type BookingTableRow = Database["public"]["Tables"]["bookings"]["Row"];
+type BookingStatusUpdate = Database["public"]["Tables"]["bookings"]["Update"]["status"];
+type BookingStatusLookupRow = Pick<BookingTableRow, "application_id" | "status">;
+type BookingNotificationLookupRow = Pick<BookingTableRow, "id" | "campaign_id" | "brand_user_id" | "influencer_user_id">;
+
+interface BookingItem {
+  type: string;
+  price: number;
+  qty: number;
+}
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
+
+const isBookingItemArray = (value: Json): value is BookingItem[] =>
+  Array.isArray(value) &&
+  value.every((item) =>
+    typeof item === "object" &&
+    item !== null &&
+    "type" in item &&
+    "qty" in item &&
+    typeof item.type === "string" &&
+    typeof item.qty === "number"
+  );
+
+const formatBookingItems = (items: BookingRow["items"] | Json) => {
+  if (isBookingItemArray(items)) {
+    return items.map((item) => `${item.qty}x ${item.type}`).join(", ");
+  }
+
+  return "";
+};
 
 type Role = "brand" | "influencer";
 
@@ -152,7 +188,7 @@ const maybeCompleteCampaign = async (campaignId: string) => {
       .eq("campaign_id", campaignId)
       .eq("status", "accepted"),
     supabase
-      .from("bookings" as any)
+      .from("bookings")
       .select("application_id, status")
       .eq("campaign_id", campaignId),
   ]);
@@ -167,7 +203,7 @@ const maybeCompleteCampaign = async (campaignId: string) => {
   }
 
   const bookingStatusByApplication = new Map<string, string>();
-  (linkedBookings || []).forEach((booking: any) => {
+  (linkedBookings || []).forEach((booking: BookingStatusLookupRow) => {
     if (booking.application_id) {
       bookingStatusByApplication.set(booking.application_id, booking.status);
     }
@@ -183,9 +219,13 @@ const maybeCompleteCampaign = async (campaignId: string) => {
 };
 
 const Dashboard = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, influencerId, brandId } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const openBrandProfile = async (event: React.MouseEvent, userId?: string | null) => {
+    event.stopPropagation();
+    await navigateToBrandProfile(navigate, userId);
+  };
   const [activeRole, setActiveRole] = useState<Role>("brand");
 
   // Fetch all dashboard data with React Query (replaces 26+ queries)
@@ -226,49 +266,64 @@ const Dashboard = () => {
     ];
   }, [dashboardData, user?.id]);
 
+  const hasInfluencerProfile = !!influencerId || !!dashboardData?.influencer_profile;
+  const hasBrandProfile = !!brandId || !!dashboardData?.brand_profile;
+
   const defaultRole = useMemo<Role>(() => {
-    if (dashboardData?.influencer_profile && !dashboardData?.brand_profile) {
+    if (hasInfluencerProfile && !hasBrandProfile) {
       return "influencer";
     }
     return "brand";
-  }, [dashboardData?.influencer_profile, dashboardData?.brand_profile]);
+  }, [hasInfluencerProfile, hasBrandProfile]);
 
   useEffect(() => {
     setActiveRole((currentRole) => {
-      if (currentRole === "brand" && defaultRole === "influencer" && !dashboardData?.brand_profile) {
+      if (currentRole === "brand" && defaultRole === "influencer" && !hasBrandProfile) {
         return "influencer";
       }
-      if (currentRole === "influencer" && defaultRole === "brand" && !dashboardData?.influencer_profile) {
+      if (currentRole === "influencer" && defaultRole === "brand" && !hasInfluencerProfile) {
         return "brand";
       }
       return currentRole;
     });
-  }, [defaultRole, dashboardData?.brand_profile, dashboardData?.influencer_profile]);
+  }, [defaultRole, hasBrandProfile, hasInfluencerProfile]);
 
   // ---- Handlers ----
   const updateBookingStatus = async (bookingId: string, status: string) => {
     const { data: booking, error: bookingError } = await supabase
-      .from("bookings" as any)
-      .select("id, campaign_id")
+      .from("bookings")
+      .select("id, campaign_id, brand_user_id, influencer_user_id")
       .eq("id", bookingId)
-      .maybeSingle();
+      .maybeSingle<BookingNotificationLookupRow>();
 
     if (bookingError || !booking) {
       toast({ title: "Booking update failed", description: bookingError?.message || "Booking not found.", variant: "destructive" });
       return;
     }
 
-    const { error } = await supabase.from("bookings" as any).update({ status } as any).eq("id", bookingId);
+    const { error } = await supabase.from("bookings").update({ status: status as BookingStatusUpdate }).eq("id", bookingId);
     if (error) {
       toast({ title: "Booking update failed", description: error.message, variant: "destructive" });
       return;
     }
 
+    const recipientUserId = user?.id === booking.brand_user_id ? booking.influencer_user_id : booking.brand_user_id;
+    if (recipientUserId) {
+      await createNotification({
+        userId: recipientUserId,
+        type: "booking_status_updated",
+        title: "Booking updated",
+        body: `A booking moved to ${status.replace(/_/g, " ")}.`,
+        actionUrl: booking.campaign_id ? `/campaign/${booking.campaign_id}` : "/dashboard",
+        metadata: { bookingId, campaignId: booking.campaign_id, status },
+      }).catch(() => undefined);
+    }
+
     if (status === "completed" && booking.campaign_id) {
       try {
         await maybeCompleteCampaign(booking.campaign_id);
-      } catch (completionError: any) {
-        toast({ title: "Booking updated", description: completionError?.message || "Campaign completion check failed.", variant: "destructive" });
+      } catch (completionError: unknown) {
+        toast({ title: "Booking updated", description: getErrorMessage(completionError, "Campaign completion check failed."), variant: "destructive" });
         refetch();
         return;
       }
@@ -352,6 +407,15 @@ const Dashboard = () => {
         });
       }
 
+      await createNotification({
+        userId: application.user_id,
+        type: "campaign_application_accepted",
+        title: "Application accepted",
+        body: `Your application for ${campaign.brand} was accepted.`,
+        actionUrl: `/campaign/${campaign.id}`,
+        metadata: { campaignId: campaign.id, applicationId: application.id },
+      }).catch(() => undefined);
+
       refetch();
       toast({ title: "Application accepted" });
       return;
@@ -359,6 +423,16 @@ const Dashboard = () => {
 
     const { error } = await supabase.from("campaign_applications").update({ status }).eq("id", appId);
     if (!error) {
+      if (status === "rejected") {
+        await createNotification({
+          userId: application.user_id,
+          type: "campaign_application_rejected",
+          title: "Application update",
+          body: `Your application was ${status}.`,
+          actionUrl: `/campaign/${application.campaign_id}`,
+          metadata: { campaignId: application.campaign_id, applicationId: application.id, status },
+        }).catch(() => undefined);
+      }
       refetch(); // Refresh dashboard data
       toast({ title: `Application ${status}` });
     }
@@ -375,8 +449,8 @@ const Dashboard = () => {
       try {
         await rejectPendingApplicationsForCampaign(campaignId);
         await maybeCompleteCampaign(campaignId);
-      } catch (statusError: any) {
-        toast({ title: "Campaign updated", description: statusError?.message || "Pending applications could not be resolved.", variant: "destructive" });
+      } catch (statusError: unknown) {
+        toast({ title: "Campaign updated", description: getErrorMessage(statusError, "Pending applications could not be resolved."), variant: "destructive" });
         refetch();
         return;
       }
@@ -398,7 +472,7 @@ const Dashboard = () => {
     }
 
     const { count: linkedBookingsCount, error: bookingsError } = await supabase
-      .from("bookings" as any)
+      .from("bookings")
       .select("*", { count: "exact", head: true })
       .eq("campaign_id", campaignId);
 
@@ -504,17 +578,17 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
+        <div className="mb-6 grid grid-cols-2 gap-2.5 sm:gap-3">
           {currentStats.map((s, i) => (
             <motion.div key={`${activeRole}-${i}`} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
-              <Card className="glass-card">
-                <CardContent className="p-4">
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <s.icon size={18} className="text-primary" />
+              <Card className="border-slate-200/70 bg-white shadow-sm">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-primary/8 sm:h-9 sm:w-9">
+                    <s.icon size={16} className="text-primary sm:h-[18px] sm:w-[18px]" />
                   </div>
-                  <div className="font-display font-bold text-xl text-foreground">{s.value}</div>
-                  <div className="text-xs text-muted-foreground">{s.label}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</div>
+                  <div className="font-display text-[1.65rem] font-bold leading-none text-foreground sm:text-xl">{s.value}</div>
+                  <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-slate-500 sm:text-xs sm:normal-case sm:tracking-normal">{s.label}</div>
+                  <div className="mt-1 text-[11px] leading-4 text-muted-foreground sm:text-[10px]">{s.sub}</div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -531,13 +605,12 @@ const Dashboard = () => {
                 bookings={bookings.filter(b => b.brand_user_id === user.id)}
                 pendingApps={pendingApps}
                 getCampaignName={getCampaignName}
-                user={user}
                 navigate={navigate}
                 updateApplicationStatus={updateApplicationStatus}
                 toggleCampaignStatus={toggleCampaignStatus}
                 deleteCampaign={deleteCampaign}
                 updateBookingStatus={updateBookingStatus}
-                hasBrandProfile={!!dashboardData?.brand_profile}
+                hasBrandProfile={hasBrandProfile}
               />
             </motion.div>
           ) : (
@@ -545,7 +618,7 @@ const Dashboard = () => {
               <InfluencerDashboard
                 myApplications={myApplications}
                 bookings={bookings.filter(b => b.influencer_user_id === user.id)}
-                hasProfile={!!dashboardData?.influencer_profile}
+                hasProfile={hasInfluencerProfile}
                 profileStats={dashboardData?.influencer_profile}
                 navigate={navigate}
                 updateBookingStatus={updateBookingStatus}
@@ -565,8 +638,7 @@ interface BrandDashboardProps {
   bookings: BookingRow[];
   pendingApps: ApplicationRow[];
   getCampaignName: (id: string) => string;
-  user: any;
-  navigate: any;
+  navigate: NavigateFunction;
   updateApplicationStatus: (id: string, status: string) => void;
   toggleCampaignStatus: (id: string, status: string) => void;
   deleteCampaign: (id: string) => void;
@@ -576,15 +648,15 @@ interface BrandDashboardProps {
 
 const BrandDashboard = ({
   campaigns, applications, bookings, pendingApps, getCampaignName,
-  user, navigate,
+  navigate,
   updateApplicationStatus, toggleCampaignStatus, deleteCampaign, updateBookingStatus,
   hasBrandProfile
 }: BrandDashboardProps) => (
   <Tabs defaultValue="campaigns" className="w-full">
-    <TabsList className="mb-4 grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
+    <TabsList className="mb-4 grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-3">
       <TabsTrigger value="campaigns" className="font-display text-xs">Campaigns</TabsTrigger>
       <TabsTrigger value="received-apps" className="font-display text-xs">
-        Apps ({pendingApps.length})
+        Applications ({pendingApps.length})
       </TabsTrigger>
       <TabsTrigger value="bookings" className="font-display text-xs">
         Bookings ({bookings.filter(b => b.status === "pending").length})
@@ -606,13 +678,9 @@ const BrandDashboard = ({
                 <Plus size={16} className="mr-2" /> Create Campaign
               </Button>
             ) : (
-              <JoinBrandModal
-                trigger={
-                  <Button className="mt-4 gradient-primary border-0 text-primary-foreground">
-                    <Plus size={16} className="mr-2" /> Join as Brand
-                  </Button>
-                }
-              />
+              <Button className="mt-4 gradient-primary border-0 text-primary-foreground" onClick={() => navigate("/register-brand")}>
+                <Plus size={16} className="mr-2" /> Join as Brand
+              </Button>
             )}
           </CardContent>
         </Card>
@@ -630,9 +698,22 @@ const BrandDashboard = ({
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 rounded-xl bg-muted flex items-center justify-center text-xl shrink-0">{c.brand_logo}</div>
+                        <button type="button" onClick={(event) => openBrandProfile(event, c.user_id)} className="shrink-0">
+                          <BrandAvatar
+                            brand={c.brand}
+                            brandLogo={c.brand_logo}
+                            className="h-11 w-11 shrink-0 rounded-xl bg-muted"
+                            fallbackClassName="text-xl"
+                          />
+                        </button>
                         <div className="min-w-0">
-                          <Link to={`/campaign/${c.id}`} className="font-display font-semibold text-foreground hover:text-primary transition-colors truncate block text-sm">{c.brand}</Link>
+                          <button
+                            type="button"
+                            onClick={(event) => openBrandProfile(event, c.user_id)}
+                            className="block truncate text-left font-display text-sm font-semibold text-foreground transition-colors hover:text-primary"
+                          >
+                            {c.brand}
+                          </button>
                           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                             <MapPin size={10} /> {c.city} <span>•</span> <Clock size={10} /> {new Date(c.created_at).toLocaleDateString()}
                           </div>
@@ -795,9 +876,9 @@ const BrandDashboard = ({
                         <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-display font-bold text-xs">{initials}</div>
                         <div>
                           <InfluencerProfileModal profile={profile}>{profile?.name || "Unknown"}</InfluencerProfileModal>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">
-                            for <Link to={`/campaign/${app.campaign_id}`} className="text-primary hover:underline">{getCampaignName(app.campaign_id)}</Link>
-                          </div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              for <Link to={`/campaign/${app.campaign_id}`} state={{ backTo: "/dashboard" }} className="text-primary hover:underline">{getCampaignName(app.campaign_id)}</Link>
+                            </div>
                         </div>
                       </div>
                       <Badge variant={app.status === "accepted" ? "default" : app.status === "rejected" ? "destructive" : "secondary"} className="w-fit">{app.status}</Badge>
@@ -849,7 +930,7 @@ const BrandDashboard = ({
                       <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground font-bold text-sm">{booking.influencer_name?.charAt(0) || "?"}</div>
                       <div>
                         <div className="font-semibold text-sm text-foreground">Booking for {booking.influencer_name}</div>
-                        <div className="text-[10px] text-muted-foreground">{(booking.items || []).map((item: any) => `${item.qty}x ${item.type}`).join(", ")}</div>
+                        <div className="text-[10px] text-muted-foreground">{formatBookingItems(booking.items)}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 self-start sm:self-auto">
@@ -873,7 +954,7 @@ interface InfluencerDashboardProps {
   bookings: BookingRow[];
   hasProfile: boolean;
   profileStats: { name: string; followers: string; rating: number | null; engagement_rate: string | null } | null;
-  navigate: any;
+  navigate: NavigateFunction;
   updateBookingStatus: (id: string, status: string) => void;
 }
 
@@ -897,13 +978,9 @@ const InfluencerDashboard = ({
           <p className="text-muted-foreground mt-1 text-sm max-w-sm mx-auto">
             Create your influencer profile to start applying to campaigns, receiving bookings, and tracking your collaborations.
           </p>
-          <ListInfluencerModal
-            trigger={
-              <Button className="mt-4 gradient-primary border-0 text-primary-foreground">
-                Join as Influencer
-              </Button>
-            }
-          />
+          <Button className="mt-4 gradient-primary border-0 text-primary-foreground" onClick={() => navigate("/register")}>
+            Join as Influencer
+          </Button>
         </CardContent>
       </Card>
     );
@@ -911,7 +988,7 @@ const InfluencerDashboard = ({
 
   return (
     <Tabs defaultValue="applications" className="w-full">
-      <TabsList className="mb-4 grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-2">
+      <TabsList className="mb-4 grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-2">
         <TabsTrigger value="applications" className="font-display text-xs">My Applications</TabsTrigger>
         <TabsTrigger value="bookings" className="font-display text-xs">
           Bookings ({bookings.filter(b => b.status === "pending").length})
@@ -926,7 +1003,7 @@ const InfluencerDashboard = ({
               <Send size={28} className="mx-auto text-muted-foreground mb-3" />
               <h3 className="font-display font-semibold text-foreground">No applications yet</h3>
               <p className="text-muted-foreground mt-1 text-sm">Browse campaigns and apply to start collaborating.</p>
-              <Button className="mt-4 gradient-primary border-0 text-primary-foreground" onClick={() => navigate("/")}>Browse Campaigns</Button>
+              <Button className="mt-4 gradient-primary border-0 text-primary-foreground" onClick={() => navigate("/?tab=campaigns")}>Browse Campaigns</Button>
             </CardContent>
           </Card>
         ) : (
@@ -938,13 +1015,32 @@ const InfluencerDashboard = ({
               const stage = app.status === "accepted" ? collaborationStage(linkedBooking?.status) : null;
               return (
                 <motion.div key={app.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-                  <Card className="glass-card hover:shadow-lg transition-all cursor-pointer" onClick={() => campaign && navigate(`/campaign/${campaign.id}`)}>
+                  <Card className="glass-card hover:shadow-lg transition-all cursor-pointer" onClick={() => campaign && navigate(`/campaign/${campaign.id}`, { state: { backTo: "/dashboard" } })}>
                     <CardContent className="p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-lg">{campaign?.brand_logo || "B"}</div>
+                          <button
+                            type="button"
+                            onClick={(event) => openBrandProfile(event, campaign?.user_id)}
+                            className="shrink-0"
+                          >
+                            <BrandAvatar
+                              brand={campaign?.brand || "Brand"}
+                              brandLogo={campaign?.brand_logo}
+                              className="h-10 w-10 rounded-xl bg-muted"
+                              fallbackClassName="text-lg"
+                            />
+                          </button>
                           <div>
-                            <h3 className="font-display font-semibold text-sm text-foreground">{campaign?.brand || "Unknown"}</h3>
+                            <button
+                              type="button"
+                              onClick={(event) => openBrandProfile(event, campaign?.user_id)}
+                              className="text-left"
+                            >
+                              <h3 className="font-display text-sm font-semibold text-foreground transition-colors hover:text-primary">
+                                {campaign?.brand || "Unknown"}
+                              </h3>
+                            </button>
                             <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
                               {campaign?.city && <span className="flex items-center gap-0.5"><MapPin size={9} /> {campaign.city}</span>}
                               {campaign?.budget && <><span>•</span><span className="flex items-center gap-0.5"><IndianRupee size={9} />{campaign.budget.toLocaleString()}</span></>}
@@ -1013,7 +1109,7 @@ const InfluencerDashboard = ({
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="font-semibold text-sm text-foreground">From {booking.brand_name}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">{(booking.items || []).map((item: any) => `${item.qty}x ${item.type}`).join(", ")}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{formatBookingItems(booking.items)}</div>
                       </div>
                       <div className="flex items-center gap-1.5 self-start sm:self-auto">
                         <span className="font-bold text-xs flex items-center"><IndianRupee size={10} />{booking.total_amount.toLocaleString()}</span>
@@ -1022,7 +1118,7 @@ const InfluencerDashboard = ({
                   </div>
                   {booking.campaign_id && (
                     <div className="mt-2 text-[10px] text-muted-foreground">
-                      <Link to={`/campaign/${booking.campaign_id}`} className="text-primary hover:underline">Open linked campaign</Link>
+                      <Link to={`/campaign/${booking.campaign_id}`} state={{ backTo: "/dashboard" }} className="text-primary hover:underline">Open linked campaign</Link>
                     </div>
                   )}
                   {booking.notes && <p className="text-[11px] text-muted-foreground mt-2 bg-muted/30 rounded-lg p-2">{booking.notes}</p>}

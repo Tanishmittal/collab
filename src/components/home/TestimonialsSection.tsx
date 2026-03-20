@@ -3,14 +3,14 @@ import { Star } from "lucide-react";
 
 const testimonials = [
   {
-    quote: "InfluFlow helped us find micro-influencers in Jaipur who drove 3x more engagement than our previous national campaigns.",
+    quote: "Influgal helped us find micro-influencers in Jaipur who drove 3x more engagement than our previous national campaigns.",
     name: "Priya Sharma",
     role: "Marketing Head, StyleCraft India",
     avatar: "PS",
     gradient: "from-teal-400 to-emerald-400",
   },
   {
-    quote: "As a food blogger, getting discovered by local restaurants used to be impossible. InfluFlow changed that overnight.",
+    quote: "As a food blogger, getting discovered by local restaurants used to be impossible. Influgal changed that overnight.",
     name: "Arjun Mehta",
     role: "Food & Travel Creator, 120K followers",
     avatar: "AM",
@@ -40,7 +40,7 @@ const TestimonialsSection = () => (
           Loved by <span className="text-teal-500">Brands & Creators</span>
         </h2>
         <p className="text-gray-500 mt-4 max-w-xl mx-auto text-lg leading-relaxed">
-          Don't take our word for it, hear from the people who use InfluFlow every day.
+          Don't take our word for it, hear from the people who use Influgal every day.
         </p>
       </motion.div>
 
