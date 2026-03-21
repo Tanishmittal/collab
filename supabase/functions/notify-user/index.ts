@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Buffer } from "https://deno.land/std@0.177.0/node/buffer.ts";
+import * as djwt from "https://deno.land/x/djwt@v2.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,50 +50,86 @@ Deno.serve(async (req) => {
     // 2. Obtain OAuth2 token for Firebase via Service Account
     const serviceAccount = JSON.parse(Deno.env.get("FIREBASE_SERVICE_ACCOUNT")!);
     
+    // Format private key correctly (replace \n with actual newlines)
+    const privateKey = serviceAccount.private_key.replace(/\\n/g, '\n');
+
     // Create JWT for Google OAuth2
-    const header = { alg: "RS256", typ: "JWT" };
     const now = Math.floor(Date.now() / 1000);
-    const iat = now;
-    const exp = now + 3600;
-    const payload = {
+    const jwtPayload = {
       iss: serviceAccount.client_email,
       sub: serviceAccount.client_email,
       aud: "https://oauth2.googleapis.com/token",
-      iat,
-      exp,
+      iat: now,
+      exp: now + 3600,
       scope: "https://www.googleapis.com/auth/cloud-platform",
     };
 
-    // We use a library or manual fetch for token exchange
-    // Note: Manual JWT signing in Deno requires crypto.subtle or a library
-    // For this implementation, we'll use a fetch-based exchange once we have a signed token
-    // Since signing is complex without a library, we'll structure it clearly.
+    // Import the private key for signing
+    const pemContents = privateKey.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, "");
+    const binaryKey = Buffer.from(pemContents, "base64");
     
-    console.log(`Sending push to ${user_id} with token ${profile.fcm_token.substring(0, 10)}...`);
+    const cryptoKey = await crypto.subtle.importKey(
+      "pkcs8",
+      binaryKey,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
 
-    // In a real Deno environment, you'd use a JWT library like:
-    // import * as djwt from "https://deno.land/x/djwt/mod.ts";
+    const jwt = await djwt.create({ alg: "RS256", typ: "JWT" }, jwtPayload, cryptoKey);
+
+    // Exchange JWT for access token
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: jwt,
+      }),
+    });
+
+    const { access_token } = await tokenResponse.json();
     
-    // For this plan, we'll provide the logic to call the FCM endpoint
+    if (!access_token) {
+      throw new Error("Failed to obtain OAuth2 access token");
+    }
+
+    // 3. Post to FCM V1
     const fcmUrl = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
     
-    // Post to FCM
-    // const fcmResponse = await fetch(fcmUrl, {
-    //   method: "POST",
-    //   headers: {
-    //     Authorization: `Bearer ${accessToken}`,
-    //     "Content-Type": "application/json",
-    //   },
-    //   body: JSON.stringify({
-    //     message: {
-    //       token: profile.fcm_token,
-    //       notification: { title, body },
-    //       data: data || {},
-    //     },
-    //   }),
-    // });
+    const fcmResponse = await fetch(fcmUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          token: profile.fcm_token,
+          notification: { title, body },
+          data: data || {},
+          android: {
+            priority: "high",
+            notification: {
+              sound: "default",
+              click_action: "TOP_LEVEL_NAV",
+            }
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: "default",
+                badge: 1
+              }
+            }
+          }
+        },
+      }),
+    });
 
-    return new Response(JSON.stringify({ success: true, message: "Notification request structured" }), {
+    const fcmResult = await fcmResponse.json();
+
+    return new Response(JSON.stringify({ success: true, result: fcmResult }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

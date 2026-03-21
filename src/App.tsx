@@ -25,6 +25,7 @@ const CampaignDetail = lazy(() => import("./pages/CampaignDetail"));
 const Messages = lazy(() => import("./pages/Messages"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Auth = lazy(() => import("./pages/Auth"));
+const NativeLanding = lazy(() => import("./pages/NativeLanding"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const OnboardingCheck = lazy(() => import("./pages/OnboardingCheck"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -65,6 +66,9 @@ const HomeWrapper = () => {
         </DashboardLayout>
       </RequireCompletedOnboarding>
     );
+  }
+  if (isNativeApp()) {
+    return <NativeLanding />;
   }
   return <Index />;
 };

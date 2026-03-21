@@ -1,6 +1,7 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { PushNotifications, Token, ActionPerformed } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from './use-toast';
@@ -8,6 +9,8 @@ import { useToast } from './use-toast';
 export const usePushNotifications = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const initialized = useRef(false);
 
   const registerPush = useCallback(async () => {
     if (!Capacitor.isNativePlatform()) return;
@@ -47,47 +50,90 @@ export const usePushNotifications = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform() || !user) return;
+    if (!user || initialized.current) return;
 
-    // Add listeners
-    const registrationListener = PushNotifications.addListener('registration', (token: Token) => {
-      console.log('Push registration success, token: ' + token.value);
-      updateToken(token.value);
-    });
+    initialized.current = true;
+    
+    // 1. Native Push Listeners
+    let registrationListener: any;
+    let registrationErrorListener: any;
+    let notificationReceivedListener: any;
+    let notificationActionPerformedListener: any;
 
-    const registrationErrorListener = PushNotifications.addListener('registrationError', (error: any) => {
-      console.error('Error on registration: ' + JSON.stringify(error));
-    });
-
-    const notificationReceivedListener = PushNotifications.addListener(
-      'pushNotificationReceived',
-      (notification) => {
-        console.log('Push received: ' + JSON.stringify(notification));
-        toast({
-          title: notification.title || 'New Notification',
-          description: notification.body,
+    if (Capacitor.isNativePlatform()) {
+      const addListeners = async () => {
+        registrationListener = await PushNotifications.addListener('registration', (token: Token) => {
+          console.log('Push registration success');
+          updateToken(token.value);
         });
-      },
-    );
 
-    const notificationActionPerformedListener = PushNotifications.addListener(
-      'pushNotificationActionPerformed',
-      (notification: ActionPerformed) => {
-        console.log('Push action performed: ' + JSON.stringify(notification));
-        // Handle navigation or other actions here
-      },
-    );
+        registrationErrorListener = await PushNotifications.addListener('registrationError', (error: any) => {
+          console.error('Error on registration: ' + JSON.stringify(error));
+        });
 
-    // Initial registration
-    registerPush();
+        notificationReceivedListener = await PushNotifications.addListener(
+          'pushNotificationReceived',
+          (notification) => {
+            console.log('Push received: ' + JSON.stringify(notification));
+            toast({
+              title: notification.title || 'New Notification',
+              description: notification.body,
+            });
+          },
+        );
+
+        notificationActionPerformedListener = await PushNotifications.addListener(
+          'pushNotificationActionPerformed',
+          (action: ActionPerformed) => {
+            console.log('Push action performed: ' + JSON.stringify(action));
+            const actionUrl = action.notification.data?.action_url;
+            if (actionUrl) {
+              console.log('Navigating to:', actionUrl);
+              navigate(actionUrl);
+            }
+          },
+        );
+      };
+
+      addListeners();
+      registerPush();
+    }
+
+    // 2. Web Realtime Fallback (Internal App Alerts)
+    const channel = supabase
+      .channel('public:notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload: any) => {
+          // Only show toast if we're not on a native platform (where push handles it)
+          // or if the app is foregrounded.
+          console.log('Realtime notification received:', payload);
+          toast({
+            title: payload.new.title || 'New Alert',
+            description: payload.new.body,
+            onClick: () => {
+              if (payload.new.action_url) navigate(payload.new.action_url);
+            }
+          });
+        }
+      )
+      .subscribe();
 
     return () => {
-      registrationListener.remove();
-      registrationErrorListener.remove();
-      notificationReceivedListener.remove();
-      notificationActionPerformedListener.remove();
+      if (registrationListener) registrationListener.remove();
+      if (registrationErrorListener) registrationErrorListener.remove();
+      if (notificationReceivedListener) notificationReceivedListener.remove();
+      if (notificationActionPerformedListener) notificationActionPerformedListener.remove();
+      supabase.removeChannel(channel);
+      initialized.current = false;
     };
-  }, [user, registerPush, updateToken, toast]);
+  }, [user, registerPush, updateToken, toast, navigate]);
 
   return { registerPush };
 };
