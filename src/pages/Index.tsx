@@ -416,9 +416,11 @@ const Index = () => {
         </DeferredSection>
       )}
 
-      <Suspense fallback={<div className="h-40 bg-gray-50" />}>
-        <Footer />
-      </Suspense>
+      {isGuest && (
+        <Suspense fallback={<div className="h-40 bg-gray-50" />}>
+          <Footer />
+        </Suspense>
+      )}
     </div>
   );
 };
