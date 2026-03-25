@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Instagram, Youtube, Twitter, Loader2, Copy, CheckCircle, ExternalLink, ShieldCheck, XCircle } from "lucide-react";
+import { Instagram, Youtube, Twitter, Loader2, Copy, CheckCircle, ExternalLink, ShieldCheck, XCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,13 +21,15 @@ interface SocialVerificationProps {
   onVerified: () => void;
   onVerifiedPlatformsChange: (platforms: string[]) => void;
   onUnverified?: () => void;
-  onStatsFetched?: (stats: { followers?: string; engagementRate?: string }) => void;
+  onStatsFetched?: (stats: { followers?: string; engagementRate?: string; platform?: string; totalFollowers?: string }) => void;
+  totalFollowers?: string;
+  platformStats?: Record<string, string>;
 }
 
 const PLATFORMS = [
-  { id: "instagram", label: "Instagram", icon: Instagram, placeholder: "https://instagram.com/yourhandle", color: "text-pink-500" },
-  { id: "youtube", label: "YouTube", icon: Youtube, placeholder: "https://youtube.com/@yourchannel", color: "text-red-500" },
-  { id: "twitter", label: "X (Twitter)", icon: Twitter, placeholder: "https://x.com/yourhandle", color: "text-sky-500" },
+  { id: "instagram", label: "Instagram", icon: Instagram, placeholder: "@yourhandle or yourhandle", color: "text-pink-500" },
+  { id: "youtube", label: "YouTube", icon: Youtube, placeholder: "@yourchannel", color: "text-red-500" },
+  { id: "twitter", label: "X (Twitter)", icon: Twitter, placeholder: "@yourhandle", color: "text-sky-500" },
 ] as const;
 
 const toStoredPlatform = (platformId: string) =>
@@ -50,6 +52,8 @@ const SocialVerification = ({
   onVerifiedPlatformsChange,
   onUnverified,
   onStatsFetched,
+  totalFollowers,
+  platformStats,
 }: SocialVerificationProps) => {
   const { toast } = useToast();
   const [verifying, setVerifying] = useState<string | null>(null);
@@ -80,16 +84,21 @@ const SocialVerification = ({
   };
 
   const handleVerify = async (platformId: string) => {
-    const url = urls[platformId]?.trim();
-    if (!url) {
-      toast({ title: "Enter URL first", description: "Please enter your profile URL before verifying.", variant: "destructive" });
+    const socialUrl = urls[platformId]?.trim();
+    if (!socialUrl) {
+      toast({ title: "Enter Username", description: "Please enter your social media handle before verifying.", variant: "destructive" });
       return;
     }
 
     setVerifying(platformId);
     try {
-      const { data, error } = await supabase.functions.invoke("verify-social", {
-        body: { platform: platformId, url, verificationCode },
+      const { data, error } = await supabase.functions.invoke("social-service-apify", {
+        body: {
+          platform: platformId,
+          url: socialUrl,
+          verificationCode: verificationCode,
+          action: "verify"
+        },
       });
 
       if (error) {
@@ -105,6 +114,8 @@ const SocialVerification = ({
         onStatsFetched?.({
           followers: data.stats.followers,
           engagementRate: data.stats.engagement_rate,
+          platform: platformId,
+          totalFollowers: data.stats.totalFollowers,
         });
       }
 
@@ -171,9 +182,11 @@ const SocialVerification = ({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
-          <p className="mb-2 text-sm text-muted-foreground">
-            Add this code to any of your social media bios, then click <strong>Verify</strong>:
-          </p>
+          <div className="flex items-center justify-between mb-2">
+             <p className="text-sm text-muted-foreground">
+              Add code to your bio, then click <strong>Verify</strong>:
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-foreground">
               {verificationCode}
@@ -193,9 +206,16 @@ const SocialVerification = ({
               <Label className="flex items-center gap-1.5">
                 <Icon size={14} className={platform.color} /> {platform.label}
                 {isPlatformVerified && (
-                  <Badge className="ml-1 border-success/30 bg-success/20 px-1.5 py-0 text-[10px] text-success">
-                    <CheckCircle size={10} className="mr-0.5" /> Verified
-                  </Badge>
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <Badge className="border-success/30 bg-success/20 px-1.5 py-0 text-[10px] text-success">
+                      <CheckCircle size={10} className="mr-0.5" /> Verified
+                    </Badge>
+                    {(platformStats?.[platform.id] !== undefined && platformStats?.[platform.id] !== null && platformStats[platform.id] !== "") && (
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        ({platformStats[platform.id]})
+                      </span>
+                    )}
+                  </div>
                 )}
               </Label>
               <div className="flex gap-2">
@@ -207,16 +227,28 @@ const SocialVerification = ({
                   disabled={isPlatformVerified}
                 />
                 {isPlatformVerified ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRemoveVerification(platform.id)}
-                    disabled={removing !== null}
-                    className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    {removing === platform.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
-                    Remove
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleVerify(platform.id)}
+                      disabled={verifying !== null}
+                      className="shrink-0 text-teal-600 hover:bg-teal-50"
+                    >
+                      {verifying === platform.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                      {/* sync */}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRemoveVerification(platform.id)}
+                      disabled={removing !== null}
+                      className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      {removing === platform.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                      {/* remove */}
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     variant="outline"
@@ -235,7 +267,7 @@ const SocialVerification = ({
         })}
 
         <p className="text-xs text-muted-foreground">
-          Only verified socials are shown publicly. Follower count and engagement rate can be refreshed from verified accounts.
+          Only verified socials are shown publicly. Metric updates are synced from your social accounts.
         </p>
       </CardContent>
     </Card>

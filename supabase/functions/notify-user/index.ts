@@ -8,7 +8,9 @@ const corsHeaders = {
 };
 
 interface PushPayload {
-  user_id: string;
+  user_id?: string;
+  segment?: 'all' | 'influencers' | 'brands';
+  city?: string;
   title: string;
   body: string;
   data?: Record<string, string>;
@@ -24,25 +26,53 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
-    const { user_id, title, body, data } = await req.json() as PushPayload;
+    const { user_id, segment, city, title, body, data } = await req.json() as PushPayload;
 
-    if (!user_id || !title || !body) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
+    if (!title || !body || (!user_id && !segment)) {
+      return new Response(JSON.stringify({ error: "Missing required fields (title, body, and either user_id or segment)" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 1. Get user's FCM token
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("fcm_token, notifications_enabled")
-      .eq("user_id", user_id)
-      .single();
+    // 1. Get targets (FCM tokens)
+    let tokens: string[] = [];
 
-    if (profileError || !profile?.fcm_token || !profile.notifications_enabled) {
-      console.log(`Notification skipped for user ${user_id}: ${profileError?.message || 'Token missing or disabled'}`);
-      return new Response(JSON.stringify({ success: false, message: "Notification skipped" }), {
+    if (user_id) {
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from("profiles")
+        .select("fcm_token, notifications_enabled")
+        .eq("user_id", user_id)
+        .single();
+
+      if (!profileError && profile?.fcm_token && profile.notifications_enabled) {
+        tokens = [profile.fcm_token];
+      }
+    } else {
+      // Broadcast mode
+      let query = supabaseAdmin
+        .from("profiles")
+        .select("fcm_token")
+        .not("fcm_token", "is", null)
+        .eq("notifications_enabled", true);
+
+      if (segment === 'influencers') {
+        query = query.eq('user_type', 'influencer');
+      } else if (segment === 'brands') {
+        query = query.eq('user_type', 'brand');
+      }
+
+      if (city) {
+        query = query.ilike('city', `%${city}%`);
+      }
+
+      const { data: profiles, error: broadcastError } = await query;
+      if (broadcastError) throw broadcastError;
+      tokens = profiles?.map(p => p.fcm_token).filter(Boolean) as string[] || [];
+    }
+
+    if (tokens.length === 0) {
+      return new Response(JSON.stringify({ success: false, message: "No target tokens found" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -94,42 +124,62 @@ Deno.serve(async (req) => {
       throw new Error("Failed to obtain OAuth2 access token");
     }
 
-    // 3. Post to FCM V1
+    // 3. Post to FCM V1 for each token
     const fcmUrl = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
-    
-    const fcmResponse = await fetch(fcmUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: {
-          token: profile.fcm_token,
-          notification: { title, body },
-          data: data || {},
-          android: {
-            priority: "high",
-            notification: {
-              sound: "default",
-              click_action: "TOP_LEVEL_NAV",
-            }
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const token of tokens) {
+      try {
+        const fcmResponse = await fetch(fcmUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+            "Content-Type": "application/json",
           },
-          apns: {
-            payload: {
-              aps: {
-                sound: "default",
-                badge: 1
+          body: JSON.stringify({
+            message: {
+              token: token,
+              notification: { title, body },
+              data: data || {},
+              android: {
+                priority: "high",
+                notification: {
+                  sound: "default",
+                  click_action: "TOP_LEVEL_NAV",
+                }
+              },
+              apns: {
+                payload: {
+                  aps: {
+                    sound: "default",
+                    badge: 1
+                  }
+                }
               }
-            }
-          }
-        },
-      }),
-    });
+            },
+          }),
+        });
 
-    const fcmResult = await fcmResponse.json();
+        if (fcmResponse.ok) {
+          successCount++;
+        } else {
+          const errData = await fcmResponse.json();
+          console.error(`FCM error for token ${token.substring(0, 10)}...:`, errData);
+          failureCount++;
+        }
+      } catch (e) {
+        console.error("Fetch error during FCM loop:", e);
+        failureCount++;
+      }
+    }
 
-    return new Response(JSON.stringify({ success: true, result: fcmResult }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      sent: successCount,
+      failed: failureCount,
+      total: tokens.length
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

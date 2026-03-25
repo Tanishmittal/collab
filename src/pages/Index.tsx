@@ -17,6 +17,7 @@ const GuestInfluencerCarousel = lazy(() => import("@/components/home/GuestInflue
 const HowItWorksSection = lazy(() => import("@/components/home/HowItWorksSection"));
 const StatsSection = lazy(() => import("@/components/home/StatsSection"));
 const TestimonialsSection = lazy(() => import("@/components/home/TestimonialsSection"));
+const Footer = lazy(() => import("@/components/home/Footer"));
 
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
 type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
@@ -414,6 +415,10 @@ const Index = () => {
           </Suspense>
         </DeferredSection>
       )}
+
+      <Suspense fallback={<div className="h-40 bg-gray-50" />}>
+        <Footer />
+      </Suspense>
     </div>
   );
 };

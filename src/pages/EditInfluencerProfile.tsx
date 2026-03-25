@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Save, Loader2, ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
@@ -20,7 +20,11 @@ import type { Database } from "@/integrations/supabase/types";
 import { goBackOr } from "@/lib/navigation";
 
 type PortfolioItemRow = Database["public"]["Tables"]["portfolio_items"]["Row"];
-type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
+type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"] & {
+  ig_followers?: string | number | null;
+  yt_subscribers?: string | number | null;
+  twitter_followers?: string | number | null;
+};
 type PortfolioDraft = Pick<
   PortfolioItemRow,
   "id" | "title" | "description" | "platform" | "media_type" | "media_url" | "thumbnail_url" | "external_url" | "is_featured"
@@ -99,6 +103,9 @@ const EditInfluencerProfile = () => {
   const [instagramUrl, setInstagramUrl] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [twitterUrl, setTwitterUrl] = useState("");
+  const [igFollowers, setIgFollowers] = useState("");
+  const [ytSubscribers, setYtSubscribers] = useState("");
+  const [twitterFollowers, setTwitterFollowers] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [isVerified, setIsVerified] = useState(false);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioDraft[]>([]);
@@ -131,6 +138,9 @@ const EditInfluencerProfile = () => {
         youtube_url?: string | null;
         twitter_url?: string | null;
         verification_code?: string | null;
+        ig_followers?: string | null;
+        yt_subscribers?: string | null;
+        twitter_followers?: string | null;
       };
 
       setProfileId(profile.id);
@@ -153,6 +163,9 @@ const EditInfluencerProfile = () => {
       setInstagramUrl(profile.instagram_url || "");
       setYoutubeUrl(profile.youtube_url || "");
       setTwitterUrl(profile.twitter_url || "");
+      setIgFollowers(profile.ig_followers ?? "");
+      setYtSubscribers(profile.yt_subscribers ?? "");
+      setTwitterFollowers(profile.twitter_followers ?? "");
       setVerificationCode(profile.verification_code || "");
       setIsVerified(initialVerifiedPlatforms.length > 0);
 
@@ -243,23 +256,23 @@ const EditInfluencerProfile = () => {
           : Promise.resolve(),
         portfolioItems.length > 0
           ? supabase.from("portfolio_items").upsert(
-              portfolioItems
-                .filter((item) => item.media_url.trim())
-                .map((item, index) => ({
-                  id: item.id || undefined,
-                  influencer_profile_id: profileId,
-                  title: createPortfolioTitle(item.description || "", index),
-                  description: item.description?.trim() || null,
-                  platform: null,
-                  media_type: inferPortfolioMediaType(item.media_url),
-                  media_url: item.media_url.trim(),
-                  thumbnail_url: null,
-                  external_url: null,
-                  is_featured: false,
-                  sort_order: index,
-                })),
-              { onConflict: "id" }
-            )
+            portfolioItems
+              .filter((item) => item.media_url.trim())
+              .map((item, index) => ({
+                id: item.id || undefined,
+                influencer_profile_id: profileId,
+                title: createPortfolioTitle(item.description || "", index),
+                description: item.description?.trim() || null,
+                platform: null,
+                media_type: inferPortfolioMediaType(item.media_url),
+                media_url: item.media_url.trim(),
+                thumbnail_url: null,
+                external_url: null,
+                is_featured: false,
+                sort_order: index,
+              })),
+            { onConflict: "id" }
+          )
           : Promise.resolve(),
       ]);
     }
@@ -288,8 +301,8 @@ const EditInfluencerProfile = () => {
   }
 
   return (
-      <div className="min-h-screen bg-background">
-        <Navbar variant="minimal" title="Edit Profile" />
+    <div className="min-h-screen bg-background">
+      <Navbar variant="minimal" title="Edit Profile" />
 
       <div className="container max-w-5xl py-6 pb-16 space-y-4">
         <Button
@@ -340,15 +353,6 @@ const EditInfluencerProfile = () => {
               <Textarea value={bio} onChange={e => setBio(e.target.value)} maxLength={300} className="mt-1.5 resize-none" rows={3} />
               <p className="text-xs text-muted-foreground mt-1 text-right">{bio.length}/300</p>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Niche & Audience */}
-        <Card className="glass-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="font-display text-lg">Niche & Audience</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
             <div>
               <Label>Niche *</Label>
               <Select value={niche} onValueChange={setNiche}>
@@ -356,21 +360,10 @@ const EditInfluencerProfile = () => {
                 <SelectContent>{niches.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Followers</p>
-                <p className="mt-2 text-lg font-semibold text-foreground">{followers || "0"}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Engagement Rate</p>
-                <p className="mt-2 text-lg font-semibold text-foreground">{engagementRate || "0"}%</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Audience stats are pulled from your verified social accounts and can be refreshed from the verification section below.
-            </p>
           </CardContent>
         </Card>
+
+
 
         {/* Pricing */}
         <Card className="glass-card">
@@ -490,28 +483,38 @@ const EditInfluencerProfile = () => {
 
         {/* Social Verification */}
         <div ref={verificationRef}>
-        <SocialVerification
-          verificationCode={verificationCode}
-          isVerified={isVerified}
-          verifiedPlatforms={platforms}
-          instagramUrl={instagramUrl}
-          youtubeUrl={youtubeUrl}
-          twitterUrl={twitterUrl}
-          onInstagramChange={setInstagramUrl}
-          onYoutubeChange={setYoutubeUrl}
-          onTwitterChange={setTwitterUrl}
-          onVerified={() => setIsVerified(true)}
-          onVerifiedPlatformsChange={setPlatforms}
-          onUnverified={() => {
-            setIsVerified(false);
-            setFollowers("");
-            setEngagementRate("");
-          }}
-          onStatsFetched={(stats) => {
-            if (stats.followers) setFollowers(stats.followers);
-            if (stats.engagementRate) setEngagementRate(stats.engagementRate);
-          }}
-        />
+          <SocialVerification
+            verificationCode={verificationCode}
+            isVerified={isVerified}
+            verifiedPlatforms={platforms}
+            instagramUrl={instagramUrl}
+            youtubeUrl={youtubeUrl}
+            twitterUrl={twitterUrl}
+            onInstagramChange={setInstagramUrl}
+            onYoutubeChange={setYoutubeUrl}
+            onTwitterChange={setTwitterUrl}
+            totalFollowers={followers}
+            platformStats={{
+              instagram: igFollowers,
+              youtube: ytSubscribers,
+              twitter: twitterFollowers
+            }}
+            onVerified={() => setIsVerified(true)}
+            onVerifiedPlatformsChange={setPlatforms}
+            onUnverified={() => {
+              setIsVerified(false);
+              setFollowers("");
+              setEngagementRate("");
+            }}
+            onStatsFetched={(stats) => {
+              if (stats.totalFollowers) setFollowers(stats.totalFollowers);
+              if (stats.engagementRate) setEngagementRate(stats.engagementRate);
+
+              if (stats.platform === "instagram" && stats.followers !== undefined) setIgFollowers(stats.followers);
+              if (stats.platform === "youtube" && stats.followers !== undefined) setYtSubscribers(stats.followers);
+              if (stats.platform === "twitter" && stats.followers !== undefined) setTwitterFollowers(stats.followers);
+            }}
+          />
         </div>
 
         <Button className="w-full gradient-primary border-0 text-primary-foreground font-semibold py-6 text-base" onClick={handleSave} disabled={saving}>

@@ -46,7 +46,8 @@ export const useCampaigns = (
     queryFn: async () => {
       let query = supabase
         .from('campaigns')
-        .select('*', { count: 'exact' });
+        .select('*', { count: 'exact' })
+        .eq('is_active', true);
 
       if (userId) {
         query = query.eq('user_id', userId);

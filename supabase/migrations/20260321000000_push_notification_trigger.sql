@@ -6,10 +6,10 @@ BEGIN
   -- Requires 'pg_net' extension to be enabled (already is by default in Supabase)
   PERFORM
     net.http_post(
-      url := (SELECT value FROM JSONB_EACH_TEXT(current_setting('app.settings.supabase_url', true)::jsonb) WHERE key = 'supabase_url') || '/functions/v1/notify-user',
+      url := current_setting('app.settings.supabase_url') || '/functions/v1/notify-user',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
+        'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
       ),
       body := jsonb_build_object(
         'user_id', NEW.user_id,

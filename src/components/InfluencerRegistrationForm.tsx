@@ -57,7 +57,7 @@ const SOCIAL_PLATFORMS: Array<{
     id: "instagram",
     label: "Instagram",
     icon: Instagram,
-    placeholder: "https://instagram.com/yourhandle",
+    placeholder: "@yourhandle or yourhandle",
     colorClass: "text-pink-500",
     urlKey: "instagramUrl",
   },
@@ -65,7 +65,7 @@ const SOCIAL_PLATFORMS: Array<{
     id: "youtube",
     label: "YouTube",
     icon: Youtube,
-    placeholder: "https://youtube.com/@yourchannel",
+    placeholder: "@yourchannel",
     colorClass: "text-red-500",
     urlKey: "youtubeUrl",
   },
@@ -73,7 +73,7 @@ const SOCIAL_PLATFORMS: Array<{
     id: "twitter",
     label: "X (Twitter)",
     icon: Twitter,
-    placeholder: "https://x.com/yourhandle",
+    placeholder: "@yourhandle",
     colorClass: "text-sky-500",
     urlKey: "twitterUrl",
   },
@@ -170,8 +170,8 @@ const InfluencerRegistrationForm = ({
     const url = (form[config.urlKey] || "").trim();
     if (!url) {
       toast({
-        title: "Enter a profile URL first",
-        description: "Add your public profile URL before verifying this platform.",
+        title: "Enter a username first",
+        description: "Add your handle before verifying this platform.",
         variant: "destructive",
       });
       return;
@@ -179,8 +179,13 @@ const InfluencerRegistrationForm = ({
 
     setVerifying(platformId);
     try {
-      const { data, error } = await supabase.functions.invoke("verify-social", {
-        body: { platform: platformId, url, verificationCode: form.verificationCode },
+      const { data, error } = await supabase.functions.invoke("social-service-apify", {
+        body: { 
+          platform: config.id, 
+          url: form[config.urlKey], 
+          verificationCode: form.verificationCode,
+          action: "verify"
+        },
       });
 
       if (error) {
@@ -376,7 +381,7 @@ const InfluencerRegistrationForm = ({
               <MobileStepIntro
                 step="Step 3"
                 title="Connect and verify your platforms"
-                description="Add a public social URL and verify it. Only verified socials will show on your public profile."
+                description="Add your social media handle and verify it. Only verified accounts will show on your profile."
                 accentClass="text-slate-500"
               />
 

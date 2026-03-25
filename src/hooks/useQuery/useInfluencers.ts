@@ -41,7 +41,8 @@ export const useInfluencers = (
     queryFn: async () => {
       let query = supabase
         .from('influencer_profiles')
-        .select('*', { count: 'exact' });
+        .select('*', { count: 'exact' })
+        .eq('is_active', true);
 
       if (niche) {
         query = query.eq('niche', niche);

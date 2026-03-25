@@ -1,7 +1,8 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   BarChart3, MessageSquare, Search, UserCircle, Building2, Bell,
-  Settings2, LogOut, ChevronRight, Star, Megaphone, PlusSquare
+  Settings2, LogOut, ChevronRight, Star, Megaphone, PlusSquare,
+  Shield, Lock
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ type NavItem = {
   path: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   activePath?: string;
+  target?: string;
 };
 
 type NavGroup = {
@@ -60,6 +62,13 @@ const Sidebar = () => {
       items: [
         { label: "Settings", path: "/settings", icon: Settings2 },
       ]
+    },
+    {
+      label: "Legal",
+      items: [
+        { label: "Privacy Policy", path: "/privacy", icon: Lock, target: "_blank" },
+        { label: "Terms of Service", path: "/terms", icon: Shield, target: "_blank" },
+      ]
     }
   ];
 
@@ -93,6 +102,8 @@ const Sidebar = () => {
                   <Link
                     key={item.path}
                     to={item.path}
+                    target={item.target}
+                    rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
                     className={cn(
                       "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 group relative",
                       isActive 

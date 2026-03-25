@@ -35,7 +35,14 @@ import type { Database } from "@/integrations/supabase/types";
 type ReviewRow = Database["public"]["Tables"]["reviews"]["Row"];
 type BookingRow = Database["public"]["Tables"]["bookings"]["Row"];
 type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
-type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
+type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"] & {
+  ig_followers?: string | number | null;
+  yt_subscribers?: string | number | null;
+  twitter_followers?: string | number | null;
+  ig_engagement?: number | null;
+  yt_engagement?: number | null;
+  twitter_engagement?: number | null;
+};
 type BrandProfileRow = Database["public"]["Tables"]["brand_profiles"]["Row"];
 type PortfolioItemRow = Database["public"]["Tables"]["portfolio_items"]["Row"];
 
@@ -299,18 +306,16 @@ const UnifiedProfile = () => {
             <button
               type="button"
               onClick={() => setActiveTab("influencer")}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors sm:flex-none ${
-                activeTab === "influencer" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
-              }`}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors sm:flex-none ${activeTab === "influencer" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                }`}
             >
               <UserCircle2 size={16} /> Influencer
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("brand")}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors sm:flex-none ${
-                activeTab === "brand" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
-              }`}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors sm:flex-none ${activeTab === "brand" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                }`}
             >
               <Building2 size={16} /> Brand
             </button>
@@ -361,10 +366,28 @@ const InfluencerView = ({
   const [bookingOpen, setBookingOpen] = useState(false);
   const initials = influencer.name.split(" ").map((n: string) => n[0]).join("").toUpperCase();
   const verifiedSocials = [
-    influencer.instagram_url ? { label: "Instagram", href: influencer.instagram_url, icon: <Instagram size={18} className="text-pink-500" /> } : null,
-    influencer.youtube_url ? { label: "YouTube", href: influencer.youtube_url, icon: <Youtube size={18} className="text-red-500" /> } : null,
-    influencer.twitter_url ? { label: "X (Twitter)", href: influencer.twitter_url, icon: <Twitter size={18} className="text-sky-500" /> } : null,
-  ].filter(Boolean) as Array<{ label: string; href: string; icon: JSX.Element }>;
+    influencer.instagram_url ? { 
+      label: "Instagram", 
+      href: influencer.instagram_url, 
+      icon: <Instagram size={18} className="text-pink-500" />,
+      followers: influencer.ig_followers ?? "0",
+      engagement: influencer.ig_engagement
+    } : null,
+    influencer.youtube_url ? { 
+      label: "YouTube", 
+      href: influencer.youtube_url, 
+      icon: <Youtube size={18} className="text-red-500" />,
+      followers: influencer.yt_subscribers ?? "0",
+      engagement: influencer.yt_engagement
+    } : null,
+    influencer.twitter_url ? { 
+      label: "X (Twitter)", 
+      href: influencer.twitter_url, 
+      icon: <Twitter size={18} className="text-sky-500" />,
+      followers: influencer.twitter_followers ?? "0",
+      engagement: influencer.twitter_engagement
+    } : null,
+  ].filter(Boolean) as Array<{ label: string; href: string; icon: JSX.Element; followers: any; engagement: number | null }>;
 
   return (
     <div>
@@ -373,59 +396,106 @@ const InfluencerView = ({
           <div className="space-y-4 lg:col-span-5">
             <div className="space-y-4 lg:sticky lg:top-24">
               <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
-                <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">Profile Info</h3>
-                <div className="space-y-3">
-                  <div className="flex flex-row gap-4 sm:flex-row">
-                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+
+                <div className="flex flex-col gap-6">
+                  {/* Top Header: Avatar + Name info */}
+                  <div className="flex items-center gap-5">
+                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
                       {influencer.avatar_url ? (
                         <img src={influencer.avatar_url} alt={influencer.name} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-slate-400">
+                        <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-slate-400">
                           {initials}
                         </div>
                       )}
                     </div>
 
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-display text-2xl font-bold text-slate-900">{influencer.name}</h2>
-                        {influencer.is_verified && <ShieldCheck size={18} className="text-teal-500" fill="currentColor" />}
-                      </div>
-
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                        <span className="flex items-center gap-1.5">
-                          <MapPin size={13} />
+                    <div className="min-w-0 flex-1 text-center">
+                      <h2 className="font-display text-3xl font-bold tracking-tight text-slate-900">{influencer.name}</h2>
+                      <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-sm text-slate-500">
+                        <span className="flex items-center gap-1.5 font-medium text-slate-600">
+                          <MapPin size={14} className="text-slate-400" />
                           {influencer.city}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Star size={13} className="fill-amber-400 text-amber-400" />
+                        <span className="flex items-center gap-1 font-bold text-slate-900">
+                          <Star size={14} className="fill-amber-400 text-amber-400" />
                           {influencer.rating || "4.5"}
+                          <span className="ml-0.5 text-[11px] font-normal text-slate-400 uppercase tracking-wide">Rating</span>
                         </span>
-                      </div>
 
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="outline" className="h-6 rounded-md border-slate-200 bg-slate-50 px-2.5 text-[11px] font-semibold text-slate-600">
+                      </div>
+                      <div className="mt-3 flex justify-center">
+                        <Badge variant="outline" className="h-6 rounded-lg border-teal-100 bg-teal-50/50 px-2.5 text-[11px] font-bold text-teal-700">
                           {influencer.niche}
                         </Badge>
-                        {verifiedSocials.map((platform) => (
-                          <Badge key={platform} variant="outline" className="h-6 rounded-md border-slate-200 bg-white px-2.5 text-[11px] text-slate-600">
-                            <span className="mr-1">{platformIcon(platform.label === "X (Twitter)" ? "Twitter" : platform.label, 12)}</span>
-                            {platform.label}
-                          </Badge>
-                        ))}
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <p className="text-sm leading-6 text-slate-600">
-                      {influencer.bio || "No bio provided."}
+
+
+                  {/* Bio Section */}
+                  {influencer.bio && (
+                    <p className="text-sm leading-7 text-slate-600 italic">
+                      "{influencer.bio}"
                     </p>
+
+                  )}
+
+                  {/* Verified Socials List (The "Column" Section) */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Verified Presence</h3>
+                      {influencer.is_verified && (
+                        <div className="flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-teal-600 border border-teal-100/50">
+                          <ShieldCheck size={12} fill="currentColor" fillOpacity={0.2} />
+                          <span className="text-[9px] font-bold uppercase tracking-tight">Authenticated</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
+                      {verifiedSocials.map((platform) => (
+                        <div
+                          key={platform.label}
+                          className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-3 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)]"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 border border-slate-200/60 transition-colors">
+                              {platformIcon(platform.label === "X (Twitter)" ? "Twitter" : platform.label, 16)}
+                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-slate-800 leading-tight">
+                                {platform.label.split(" (")[0]}
+                              </span>
+                              <span className="text-[9px] font-medium text-slate-400">Official Profile</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            {platform.engagement && (
+                              <div className="flex flex-col items-end leading-none">
+                                <span className="text-xs font-bold text-slate-800">
+                                  {platform.engagement.toFixed(1)}%
+                                </span>
+                                <span className="text-[7px] mt-0.5 font-bold text-slate-400 uppercase tracking-tighter">
+                                  Engagement
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex flex-col items-end leading-none">
+                              <span className="text-sm font-black text-slate-900">
+                                {formatFollowerCount(platform.followers)}
+                              </span>
+                              <span className="text-[8px] mt-0.5 font-bold text-teal-600 uppercase tracking-tight">
+                                Reach
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
-                    <StatCard label="Followers" value={formatFollowerCount(influencer.followers)} />
-                    <StatCard label="Engagement" value={`${influencer.engagement_rate || "4.5"}%`} />
-                    <StatCard label="Campaigns" value={String(influencer.completed_campaigns || 0)} />
-                  </div>
+                </div>
+                {(!influencer.is_verified || verifiedSocials.length < 3) && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -437,15 +507,14 @@ const InfluencerView = ({
                           {verifiedSocials.length > 0
                             ? `${verifiedSocials.length} verified platform${verifiedSocials.length > 1 ? "s" : ""} visible on your profile.`
                             : isOwner
-                            ? "Verify at least one social account to show platforms, audience stats, and trust signals."
-                            : "This creator has not connected any verified social accounts yet."}
+                              ? "Verify at least one social account to show platforms, audience stats, and trust signals."
+                              : "This creator has not connected any verified social accounts yet."}
                         </p>
                       </div>
-                      <div className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        verifiedSocials.length > 0
-                          ? "bg-teal-50 text-teal-700"
-                          : "bg-slate-200 text-slate-600"
-                      }`}>
+                      <div className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${verifiedSocials.length > 0
+                        ? "bg-teal-50 text-teal-700"
+                        : "bg-slate-200 text-slate-600"
+                        }`}>
                         {verifiedSocials.length > 0 ? `${verifiedSocials.length} linked` : "Not verified"}
                       </div>
                     </div>
@@ -460,89 +529,59 @@ const InfluencerView = ({
                       </Button>
                     )}
                   </div>
-                  <div className="border-t border-slate-100 pt-4">
-                    <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Service Pricing</h3>
-                    <div className="mb-5 space-y-3">
-                      <PriceRow icon={<Film size={16} />} label="Reel Promotion" value={influencer.price_reel} tone="teal" />
-                      <PriceRow icon={<Play size={16} />} label="Story Promotion" value={influencer.price_story} tone="amber" />
-                      <PriceRow icon={<MapPin size={16} />} label="Visit & Review" value={influencer.price_visit} tone="slate" />
-                    </div>
+                )}
+                <div className="border-t border-slate-100 pt-4">
+                  <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Service Pricing</h3>
+                  <div className="mb-5 space-y-3">
+                    <PriceRow icon={<Film size={16} />} label="Reel Promotion" value={influencer.price_reel} tone="teal" />
+                    <PriceRow icon={<Play size={16} />} label="Story Promotion" value={influencer.price_story} tone="amber" />
+                    <PriceRow icon={<MapPin size={16} />} label="Visit & Review" value={influencer.price_visit} tone="slate" />
+                  </div>
 
-                    {isOwner ? (
-                      <Button className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800" onClick={() => navigate("/edit-profile")}>
-                        Edit Your Profile
-                      </Button>
-                    ) : !user ? (
+                  {isOwner ? (
+                    <Button className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800" onClick={() => navigate("/edit-profile")}>
+                      Edit Your Profile
+                    </Button>
+                  ) : !user ? (
+                    <Button
+                      className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
+                      onClick={() => navigate("/auth")}
+                    >
+                      Sign In to Book
+                    </Button>
+                  ) : !brandId ? (
+                    <div className="space-y-2">
                       <Button
                         className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
-                        onClick={() => navigate("/auth")}
+                        onClick={() => navigate("/register-brand")}
                       >
-                        Sign In to Book
+                        Join as Brand to Book
                       </Button>
-                    ) : !brandId ? (
-                      <div className="space-y-2">
-                        <Button
-                          className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
-                          onClick={() => navigate("/register-brand")}
-                        >
-                          Join as Brand to Book
-                        </Button>
-                        <p className="text-xs text-slate-500">
-                          Direct bookings are available for brand accounts.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Button
-                          className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
-                          onClick={() => setBookingOpen(true)}
-                        >
-                          Book This Influencer
-                        </Button>
-                        <p className="text-xs text-slate-500">
-                          Send a direct booking request using this creator&apos;s public rate card.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                      <p className="text-xs text-slate-500">
+                        Direct bookings are available for brand accounts.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Button
+                        className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
+                        onClick={() => setBookingOpen(true)}
+                      >
+                        Book This Influencer
+                      </Button>
+                      <p className="text-xs text-slate-500">
+                        Send a direct booking request using this creator&apos;s public rate card.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-
-            {influencer.is_verified && verifiedSocials.length > 0 && (
-              <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
-                <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">Connected Accounts</h3>
-                <div className="space-y-2.5">
-                  {verifiedSocials.map((social) => (
-                    <PlainSocialLink
-                      key={social.label}
-                      href={social.href}
-                      label={social.label}
-                      icon={social.label === "Instagram"
-                        ? <Instagram size={18} className="text-slate-400 transition-colors group-hover:text-pink-500" />
-                        : social.label === "YouTube"
-                          ? <Youtube size={18} className="text-slate-400 transition-colors group-hover:text-red-500" />
-                          : <Twitter size={18} className="text-slate-400 transition-colors group-hover:text-sky-500" />}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="space-y-5 lg:col-span-7">
-            
 
-            {influencer.is_verified && verifiedSocials.length > 0 && (
-              <section>
-              <h2 className="mb-3 text-base font-semibold text-slate-900">Verified Socials</h2>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {verifiedSocials.map((social) => (
-                    <SocialLink key={social.label} href={social.href} label={social.label} icon={social.icon} />
-                  ))}
-                </div>
-              </section>
-            )}
+
 
             <Tabs defaultValue="portfolio" className="w-full">
               <TabsList className="mb-4 h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 whitespace-nowrap">
@@ -860,41 +899,41 @@ const BrandView = ({
           </div>
 
           <div className="space-y-5 lg:col-span-8">
-            
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <InfoPanel
-                  icon={<Target size={16} className="text-teal-600" />}
-                  title="Who We Want To Work With"
-                  body={targetNiches.length > 0 ? "Creator categories this brand is actively seeking for campaigns." : "Add target niches to make the brand brief sharper for creators."}
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {targetNiches.length > 0 ? targetNiches.map((niche: string) => <MiniBadge key={niche} label={niche} />) : <MutedText text="No target niches added yet." />}
-                  </div>
-                </InfoPanel>
 
-                <InfoPanel
-                  icon={<MapPin size={16} className="text-teal-600" />}
-                  title="Priority Markets"
-                  body={targetCities.length > 0 ? "Cities and regions the brand is prioritizing right now." : "Add target cities to signal where activations matter most."}
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {targetCities.length > 0 ? targetCities.map((city: string) => <MiniBadge key={city} label={city} />) : <MutedText text="No target cities added yet." />}
-                  </div>
-                </InfoPanel>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <InfoPanel
+                icon={<Target size={16} className="text-teal-600" />}
+                title="Who We Want To Work With"
+                body={targetNiches.length > 0 ? "Creator categories this brand is actively seeking for campaigns." : "Add target niches to make the brand brief sharper for creators."}
+              >
+                <div className="flex flex-wrap gap-2">
+                  {targetNiches.length > 0 ? targetNiches.map((niche: string) => <MiniBadge key={niche} label={niche} />) : <MutedText text="No target niches added yet." />}
+                </div>
+              </InfoPanel>
 
-                <InfoPanel
-                  icon={<Briefcase size={16} className="text-teal-600" />}
-                  title="Profile Basics"
-                  body="The minimum signals creators usually need before deciding to apply."
-                >
-                  <div className="space-y-2 text-sm text-slate-700">
-                    <SimpleMetric label="Campaign Volume" value={`${brand.campaigns_per_month || 0} / month`} />
-                    <SimpleMetric label="Response Time" value={brand.response_time_expectation || "Not specified"} />
-                    <SimpleMetric label="Primary Contact" value={brand.contact_name || "Not listed"} />
-                  </div>
-                </InfoPanel>
-              </div>
-            
+              <InfoPanel
+                icon={<MapPin size={16} className="text-teal-600" />}
+                title="Priority Markets"
+                body={targetCities.length > 0 ? "Cities and regions the brand is prioritizing right now." : "Add target cities to signal where activations matter most."}
+              >
+                <div className="flex flex-wrap gap-2">
+                  {targetCities.length > 0 ? targetCities.map((city: string) => <MiniBadge key={city} label={city} />) : <MutedText text="No target cities added yet." />}
+                </div>
+              </InfoPanel>
+
+              <InfoPanel
+                icon={<Briefcase size={16} className="text-teal-600" />}
+                title="Profile Basics"
+                body="The minimum signals creators usually need before deciding to apply."
+              >
+                <div className="space-y-2 text-sm text-slate-700">
+                  <SimpleMetric label="Campaign Volume" value={`${brand.campaigns_per_month || 0} / month`} />
+                  <SimpleMetric label="Response Time" value={brand.response_time_expectation || "Not specified"} />
+                  <SimpleMetric label="Primary Contact" value={brand.contact_name || "Not listed"} />
+                </div>
+              </InfoPanel>
+            </div>
+
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-2 text-lg font-semibold text-slate-900">About the Brand</h2>
@@ -925,45 +964,45 @@ const BrandView = ({
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {campaigns.map((campaign) => (
-  <Link key={campaign.id} to={`/campaign/${campaign.id}`} state={{ backTo: profileBackTo }} className="group">
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 transition-all hover:border-teal-200 hover:bg-teal-50/40">
-      
-      {/* Row 1: Title + Price */}
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {campaign.brand}
-          </div>
+                  <Link key={campaign.id} to={`/campaign/${campaign.id}`} state={{ backTo: profileBackTo }} className="group">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 transition-all hover:border-teal-200 hover:bg-teal-50/40">
 
-          
-        </div>
+                      {/* Row 1: Title + Price */}
+                      <div className="mb-2 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                            {campaign.brand}
+                          </div>
 
-        <div className="shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm">
-          Rs. {campaign.budget.toLocaleString()}
-        </div>
-      </div>
 
-      {/* Row 2: Description */}
-      <p className="mb-3 line-clamp-2 text-sm text-slate-600 break-words">
-        {campaign.description}
-      </p>
+                        </div>
 
-      {/* Row 3: Badges */}
-      <div className="mb-3 flex flex-wrap gap-2">
-        <MiniBadge label={campaign.niche} />
-        <MiniBadge label={campaign.city} />
-        <MiniBadge label={`${campaign.influencers_needed} creators`} />
-      </div>
+                        <div className="shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm">
+                          Rs. {campaign.budget.toLocaleString()}
+                        </div>
+                      </div>
 
-      {/* Row 4: Metrics */}
-      <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
-        <CampaignMetric label="Applied" value={String(campaign.influencers_applied || 0)} />
-        <CampaignMetric label="Need" value={String(campaign.influencers_needed || 0)} />
-      </div>
+                      {/* Row 2: Description */}
+                      <p className="mb-3 line-clamp-2 text-sm text-slate-600 break-words">
+                        {campaign.description}
+                      </p>
 
-    </div>
-  </Link>
-))}
+                      {/* Row 3: Badges */}
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        <MiniBadge label={campaign.niche} />
+                        <MiniBadge label={campaign.city} />
+                        <MiniBadge label={`${campaign.influencers_needed} creators`} />
+                      </div>
+
+                      {/* Row 4: Metrics */}
+                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
+                        <CampaignMetric label="Applied" value={String(campaign.influencers_applied || 0)} />
+                        <CampaignMetric label="Need" value={String(campaign.influencers_needed || 0)} />
+                      </div>
+
+                    </div>
+                  </Link>
+                ))}
 
                 {campaigns.length === 0 && (
                   <div className="col-span-full rounded-2xl border border-dashed border-slate-200 py-12 text-center">
@@ -986,10 +1025,12 @@ const BrandView = ({
   );
 };
 
-const StatCard = ({ label, value }: { label: string; value: string }) => (
+const StatCard = ({ label, value, subLabel }: { label: string; value: string; subLabel?: string }) => (
   <div className="rounded-xl bg-slate-50 px-3 py-2 text-center">
     <div className="text-base font-bold text-slate-900">{value}</div>
-    <div className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+    <div className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-400">
+      {label} {subLabel && <span className="text-[9px] lowercase italic text-slate-300">({subLabel})</span>}
+    </div>
   </div>
 );
 
@@ -1006,17 +1047,6 @@ const SocialLink = ({ href, label, icon }: { href: string; label: string; icon: 
   </a>
 );
 
-const PlainSocialLink = ({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) => (
-  <a
-    href={href}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="group flex items-center gap-3 text-slate-600 transition-colors hover:text-slate-900"
-  >
-    {icon}
-    <span className="text-sm font-semibold">{label}</span>
-  </a>
-);
 
 const PriceRow = ({
   icon,
@@ -1032,13 +1062,12 @@ const PriceRow = ({
   <div className="flex items-center justify-between">
     <div className="flex items-center gap-3">
       <div
-        className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-          tone === "teal"
-            ? "bg-teal-50 text-teal-600"
-            : tone === "amber"
-              ? "bg-amber-50 text-amber-600"
-              : "bg-slate-100 text-slate-600"
-        }`}
+        className={`flex h-8 w-8 items-center justify-center rounded-lg ${tone === "teal"
+          ? "bg-teal-50 text-teal-600"
+          : tone === "amber"
+            ? "bg-amber-50 text-amber-600"
+            : "bg-slate-100 text-slate-600"
+          }`}
       >
         {icon}
       </div>

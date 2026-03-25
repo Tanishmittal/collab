@@ -30,6 +30,14 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const OnboardingCheck = lazy(() => import("./pages/OnboardingCheck"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+const AdminLayout = lazy(() => import("./pages/admin/AdminLayout").then(m => ({ default: m.AdminLayout })));
+const AdminOverview = lazy(() => import("./pages/admin/AdminOverview").then(m => ({ default: m.AdminOverview })));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminCampaigns = lazy(() => import("./pages/admin/AdminCampaigns"));
+const AdminBroadcast = lazy(() => import("./pages/admin/AdminBroadcast"));
+import { AdminGuard } from "./components/admin/AdminGuard";
 import MobileNav from "@/components/MobileNav";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 
@@ -95,9 +103,23 @@ const AppRoutes = () => {
         <Route path="/influencer/:id" element={<ProfileWrapper><UnifiedProfile /></ProfileWrapper>} />
         <Route path="/brand/:id" element={<ProfileWrapper><UnifiedProfile /></ProfileWrapper>} />
         <Route path="/campaign/:id" element={<ProfileWrapper><CampaignDetail /></ProfileWrapper>} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/onboarding-check" element={<ProtectedRoute><OnboardingCheck /></ProtectedRoute>} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+
+        {/* Admin Command Center (Web Only) */}
+        {!isNativeApp() && (
+          <Route element={<AdminGuard />}>
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminOverview />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="campaigns" element={<AdminCampaigns />} />
+              <Route path="broadcast" element={<AdminBroadcast />} />
+            </Route>
+          </Route>
+        )}
 
         {/* Protected setup routes available during onboarding */}
         <Route path="/register" element={<ProtectedRoute><RegisterInfluencer /></ProtectedRoute>} />
