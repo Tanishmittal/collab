@@ -11,6 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import StarField from "@/components/ui/StarField";
 
+import { GoogleAuth } from "@codetrix-studio/capacitor-google-auth";
+import { isNativeApp } from "@/lib/platform";
+
 const stats = [
   { value: "10K+", label: "Creators", icon: Users },
   { value: "5K+", label: "Brands", icon: Zap },
@@ -28,15 +31,37 @@ const NativeLanding = () => {
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/onboarding-check`,
-      },
-    });
+    try {
+      if (isNativeApp()) {
+        const result = await GoogleAuth.signIn();
+        if (result.authentication.idToken) {
+          const { error } = await supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: result.authentication.idToken,
+          });
+          if (error) throw error;
+          
+          toast({ title: "Welcome!", description: "Signing you in via Google." });
+          navigate("/onboarding-check");
+          return;
+        }
+      }
 
-    if (error) {
-      toast({ title: "Google sign-in failed", description: error.message, variant: "destructive" });
+      // Fallback for web or if native fails/idToken missing
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/onboarding-check`,
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({ 
+        title: "Google sign-in failed", 
+        description: error.message || "An unexpected error occurred.", 
+        variant: "destructive" 
+      });
       setLoading(false);
     }
   };

@@ -4,4 +4,5 @@
     <string name="title_activity_main">Influgal</string>
     <string name="package_name">com.influflow.app</string>
     <string name="custom_url_scheme">com.influflow.app</string>
+    <string name="google_client_id">870217356718-n9imfdtdo6dcl4kno120m8qvv7q11o4h.apps.googleusercontent.com</string>
 </resources>

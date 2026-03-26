@@ -3,6 +3,8 @@ import { Home, Search, MessageSquare, BarChart3, User, Zap, Star, type LucideIco
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
+import { isNativeApp } from "@/lib/platform";
+
 type NavItem = {
   label: string;
   icon: LucideIcon;
@@ -14,7 +16,12 @@ const MobileNav = () => {
   const location = useLocation();
   const { user, influencerId, brandId } = useAuth();
 
-  if (location.pathname === "/register" || location.pathname === "/register-brand") {
+  // Hide on certain pages or if Native & Unauthenticated
+  if (
+    location.pathname === "/register" || 
+    location.pathname === "/register-brand" ||
+    (isNativeApp() && !user)
+  ) {
     return null;
   }
 
