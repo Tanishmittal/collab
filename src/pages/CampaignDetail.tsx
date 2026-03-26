@@ -3,7 +3,7 @@ import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, MapPin, Users, IndianRupee, Clock, CheckCircle, XCircle, MessageSquare, Send, Loader2, Star
+  ArrowLeft, MapPin, Users, IndianRupee, Clock, CheckCircle, XCircle, MessageSquare, Send, Loader2, Star, Zap
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import ChatThread from "@/components/ChatThread";
@@ -715,6 +715,13 @@ const CampaignDetail = () => {
                   ) : hasApplied ? (
                     <Button disabled className="w-full" variant="secondary">
                       <CheckCircle size={16} className="mr-2" /> Already Applied
+                    </Button>
+                  ) : !influencerId ? (
+                    <Button 
+                      className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white border-0 font-semibold shadow-lg hover:shadow-teal-500/30 transition-all hover:scale-[1.01]" 
+                      onClick={() => navigate("/register")}
+                    >
+                      <Zap size={16} className="mr-2" /> Complete Profile
                     </Button>
                   ) : !canApply ? (
                     <Button disabled className="w-full" variant="secondary">

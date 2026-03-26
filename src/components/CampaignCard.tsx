@@ -23,12 +23,16 @@ const CampaignCard = ({
   campaign,
   index = 0,
   isOwn = false,
+  isLoggedIn = false,
+  hasInfluencerProfile = false,
   applicationStatus = null,
   eligibility = null,
 }: {
   campaign: Campaign;
   index?: number;
   isOwn?: boolean;
+  isLoggedIn?: boolean;
+  hasInfluencerProfile?: boolean;
   applicationStatus?: string | null;
   eligibility?: CampaignEligibilityResult | null;
 }) => {
@@ -62,8 +66,8 @@ const CampaignCard = ({
     >
       <div className="p-6 flex-grow flex flex-col relative z-10">
         {/* Top Header Section */}
-          <div className="mb-5 flex items-start">
-            <div className="flex min-w-0 items-center gap-4">
+        <div className="mb-5 flex items-start">
+          <div className="flex min-w-0 items-center gap-4">
             <button type="button" onClick={openBrandProfile} className="shrink-0">
               <BrandAvatar
                 brand={campaign.brand}
@@ -72,13 +76,13 @@ const CampaignCard = ({
                 fallbackClassName="text-3xl"
               />
             </button>
-              <div className="min-w-0">
-                <button type="button" onClick={openBrandProfile} className="block max-w-full text-left">
+            <div className="min-w-0">
+              <button type="button" onClick={openBrandProfile} className="block max-w-full text-left">
                 <h3 className="truncate font-display text-xl font-black tracking-wide text-gray-900 transition-colors hover:text-teal-600">
                   {campaign.brand}
                 </h3>
               </button>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                 <Badge className={`px-2 py-0 text-[10px] uppercase tracking-widest font-bold rounded-md ${nicheStyle} shadow-none`}>
                   {campaign.niche}
                 </Badge>
@@ -231,6 +235,17 @@ const CampaignCard = ({
                 : applicationStatus === "rejected"
                   ? "Application Rejected"
                   : "Already Applied"}
+            </button>
+          ) : isLoggedIn && !hasInfluencerProfile ? (
+            <button
+              className="w-full py-3 bg-teal-500 text-white rounded-xl font-bold tracking-wide shadow-lg hover:shadow-teal-500/30 flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate("/register");
+              }}
+            >
+              Complete Profile
+              <Zap size={16} />
             </button>
           ) : (
             <button

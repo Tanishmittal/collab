@@ -287,6 +287,8 @@ const DiscoverySection = ({
                     campaign={c}
                     index={i}
                     isOwn={c.userId === user?.id}
+                    isLoggedIn={!!user}
+                    hasInfluencerProfile={!!ownInfluencerId}
                     applicationStatus={applicationStatusByCampaign.get(c.id) || null}
                     eligibility={eligibility}
                   />
