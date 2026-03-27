@@ -172,6 +172,11 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
                     >
                       <link.icon size={16} />
                       {link.label}
+                      {link.path === "/notifications" && unreadCount > 0 && (
+                        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white ml-0.5">
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })

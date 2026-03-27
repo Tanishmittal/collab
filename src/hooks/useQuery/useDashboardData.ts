@@ -29,6 +29,7 @@ export interface DashboardData {
   } | null;
   campaigns: Array<{
     id: string;
+    user_id: string;
     brand: string;
     brand_logo: string;
     city: string;
@@ -114,7 +115,7 @@ const buildDashboardFallback = async (userId: string): Promise<DashboardData> =>
       .maybeSingle(),
     supabase
       .from('campaigns')
-      .select('id, brand, brand_logo, city, budget, influencers_needed, influencers_applied, niche, status, description, created_at, deliverables')
+      .select('id, user_id, brand, brand_logo, city, budget, influencers_needed, influencers_applied, niche, status, description, created_at, deliverables')
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
     supabase
@@ -163,7 +164,7 @@ const buildDashboardFallback = async (userId: string): Promise<DashboardData> =>
 
   const campaigns = (campaignsResult.data || []) as Pick<
     CampaignRow,
-    'id' | 'brand' | 'brand_logo' | 'city' | 'budget' | 'influencers_needed' | 'influencers_applied' | 'niche' | 'status' | 'description' | 'created_at' | 'deliverables'
+    'id' | 'user_id' | 'brand' | 'brand_logo' | 'city' | 'budget' | 'influencers_needed' | 'influencers_applied' | 'niche' | 'status' | 'description' | 'created_at' | 'deliverables'
   >[];
 
   const campaignIds = campaigns.map((campaign) => campaign.id);

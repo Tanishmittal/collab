@@ -3,7 +3,8 @@ import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, MapPin, Users, IndianRupee, Clock, CheckCircle, XCircle, MessageSquare, Send, Loader2, Star, Zap
+  ArrowLeft, MapPin, Users, IndianRupee, Clock, CheckCircle, XCircle, MessageSquare, Send, Loader2, Star, Zap,
+  MoreVertical, Pencil, Trash2, Play, Pause, Archive, ClipboardList, Info, FileText
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import ChatThread from "@/components/ChatThread";
@@ -19,6 +20,15 @@ import { Progress } from "@/components/ui/progress";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
+import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger 
+} from "@/components/ui/accordion";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
@@ -445,71 +455,44 @@ const CampaignDetail = () => {
     }
 
     if (status === "accepted") {
-      const expired = isCampaignExpired(campaign);
-      if (campaign.status !== "active" || expired) {
-        toast({ title: "Campaign unavailable", description: "Only active, non-expired campaigns can accept applications.", variant: "destructive" });
+      const { data, error } = await supabase.rpc('accept_campaign_application', { p_application_id: appId });
+
+      if (error || !data?.success) {
+        toast({ title: "Error", description: error?.message || data?.error || "Failed to accept application", variant: "destructive" });
         return;
       }
 
-      const { count: acceptedCount, error: acceptedCountError } = await supabase
-        .from("campaign_applications")
-        .select("*", { count: "exact", head: true })
-        .eq("campaign_id", application.campaign_id)
-        .eq("status", "accepted");
-
-      if (acceptedCountError) {
-        toast({ title: "Error", description: acceptedCountError.message, variant: "destructive" });
-        return;
-      }
-
-      if ((acceptedCount || 0) >= campaign.influencers_needed) {
-        toast({ title: "Campaign full", description: "All creator slots are already filled.", variant: "destructive" });
-        return;
-      }
-
-      const { error } = await supabase.from("campaign_applications").update({ status }).eq("id", appId);
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        return;
-      }
-
-      const nextAcceptedCount = (acceptedCount || 0) + 1;
-      let nextCampaignStatus = campaign.status;
-      if (nextAcceptedCount >= campaign.influencers_needed) {
-        nextCampaignStatus = "closed";
-        await supabase.from("campaigns").update({ status: "closed" }).eq("id", campaign.id);
-        await rejectPendingApplicationsForCampaign(campaign.id);
-      }
+      const { campaign_id, brand_user_id, brand_name, influencer_user_id, campaign_closed } = data;
 
       const { count: existingMessagesCount } = await supabase
         .from("messages")
         .select("*", { count: "exact", head: true })
-        .eq("application_id", application.id);
+        .eq("application_id", appId);
 
       if (!existingMessagesCount) {
         await supabase.from("messages").insert({
-          application_id: application.id,
-          campaign_id: application.campaign_id,
-          sender_id: campaign.user_id,
-          receiver_id: application.user_id,
-          content: `Your application for ${campaign.brand} has been accepted. You can chat here to coordinate next steps.`,
+          application_id: appId,
+          campaign_id,
+          sender_id: brand_user_id,
+          receiver_id: influencer_user_id,
+          content: `Your application for ${brand_name} has been accepted. You can chat here to coordinate next steps.`,
           read: false,
         });
       }
 
       await createNotification({
-        userId: application.user_id,
+        userId: influencer_user_id,
         type: "campaign_application_accepted",
         title: "Application accepted",
-        body: `Your application for ${campaign.brand} was accepted.`,
-        actionUrl: `/campaign/${campaign.id}`,
-        metadata: { campaignId: campaign.id, applicationId: application.id },
+        body: `Your application for ${brand_name} was accepted.`,
+        actionUrl: `/campaign/${campaign_id}`,
+        metadata: { campaignId: campaign_id, applicationId: appId },
       }).catch(() => undefined);
 
       setApplications((prev) => prev.map((a) => (a.id === appId ? { ...a, status } : a)));
-      setAcceptedCount(nextAcceptedCount);
-      if (nextCampaignStatus !== campaign.status) {
-        setCampaign((prev) => (prev ? { ...prev, status: nextCampaignStatus } : prev));
+      setAcceptedCount((prev) => prev + 1);
+      if (campaign_closed) {
+        setCampaign((prev) => (prev ? { ...prev, status: "closed" } : prev));
       }
       fetchBookingStatuses();
       toast({ title: "Application accepted" });
@@ -531,6 +514,39 @@ const CampaignDetail = () => {
       }).catch(() => undefined);
       setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
       toast({ title: `Application ${status}` });
+    }
+  };
+
+  const toggleCampaignStatus = async (campaignId: string, currentStatus: string) => {
+    let nextStatus = "active";
+    if (currentStatus === "active") nextStatus = "paused";
+    else if (currentStatus === "paused") nextStatus = "active";
+    else if (currentStatus === "closed") nextStatus = "active";
+
+    const { error } = await supabase
+      .from("campaigns")
+      .update({ status: nextStatus })
+      .eq("id", campaignId);
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setCampaign(prev => prev ? { ...prev, status: nextStatus } : prev);
+      toast({ title: `Campaign ${nextStatus}` });
+    }
+  };
+
+  const deleteCampaign = async (campaignId: string) => {
+    const { error } = await supabase
+      .from("campaigns")
+      .delete()
+      .eq("id", campaignId);
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Campaign deleted" });
+      navigate("/dashboard");
     }
   };
 
@@ -605,95 +621,185 @@ const CampaignDetail = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="glass-card">
             <CardContent className="p-6">
-              <div className="flex items-start gap-4 mb-4">
-                <button type="button" onClick={openBrandProfile} className="shrink-0">
-                  <BrandAvatar
-                    brand={campaign.brand}
-                    brandLogo={campaign.brand_logo}
-                    className="h-14 w-14 rounded-xl bg-muted"
-                    fallbackClassName="text-3xl"
-                  />
-                </button>
-                <div className="flex-1">
-                  <button type="button" onClick={openBrandProfile} className="text-left">
-                    <h1 className="font-display font-bold text-2xl text-foreground transition-colors hover:text-primary">{campaign.brand}</h1>
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={openBrandProfile} className="shrink-0">
+                    <BrandAvatar
+                      brand={campaign.brand}
+                      brandLogo={campaign.brand_logo}
+                      className="h-14 w-14 rounded-2xl bg-muted border shadow-sm"
+                      fallbackClassName="text-2xl font-display"
+                    />
                   </button>
-                  <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin size={14} /> {campaign.city}
-                    <span className="mx-1">•</span>
-                    <Clock size={14} /> {new Date(campaign.created_at).toLocaleDateString()}
+                  <div className="flex-1 min-w-0">
+                    <button type="button" onClick={openBrandProfile} className="text-left block w-full">
+                      <h1 className="font-display font-bold text-2xl text-foreground tracking-tight transition-colors hover:text-primary truncate leading-none">{campaign.brand}</h1>
+                    </button>
+                    <div className="mt-1 flex items-center gap-2 text-[13px] text-muted-foreground font-medium">
+                      <div className="flex items-center gap-1 opacity-80">
+                         {campaign.city}
+                      </div>
+                      <span className="opacity-30">•</span>
+                      <div className="flex items-center gap-1 opacity-80">
+                         {new Date(campaign.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <Badge variant="secondary">{campaign.niche}</Badge>
-              </div>
-
-              <p className="whitespace-pre-wrap break-words text-muted-foreground">{campaign.description}</p>
-
-              <div className="flex flex-wrap gap-1.5 mt-4">
-                {campaign.deliverables.map(d => (
-                  <Badge key={d} variant="outline">{d}</Badge>
-                ))}
-              </div>
-
-              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Creator Requirements</p>
-                    <p className="mt-1 text-sm text-slate-600">Built from the same profile information creators submit.</p>
-                  </div>
-                  {eligibility && (
-                    <Badge
-                      variant="outline"
-                      className={eligibility.eligible ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}
-                    >
-                      {eligibility.eligible ? "You match" : "Check fit"}
-                    </Badge>
+                <div className="flex items-center gap-1">
+                  <Badge variant="secondary" className="bg-slate-900 text-white hover:bg-slate-800 transition-colors px-3 py-1 font-semibold text-[11px] rounded-full">{campaign.niche}</Badge>
+                  
+                  {isOwner && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-500 hover:bg-slate-100">
+                          <MoreVertical size={18} strokeWidth={2} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48 glass-card">
+                        <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
+                          Campaign Actions
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem asChild>
+                          <Link to={`/edit-campaign/${campaign.id}`} className="flex items-center cursor-pointer w-full">
+                            <Pencil size={14} className="mr-2" /> Edit Campaign
+                          </Link>
+                        </DropdownMenuItem>
+                        
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
+                          Status
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem 
+                          className="cursor-pointer"
+                          onClick={() => toggleCampaignStatus(campaign.id, campaign.status)}
+                        >
+                          {campaign.status === "paused" ? (
+                            <><Play size={14} className="mr-2 text-green-500" /> Set Active</>
+                          ) : (
+                            <><Pause size={14} className="mr-2 text-amber-500" /> Pause Campaign</>
+                          )}
+                        </DropdownMenuItem>
+                        {campaign.status !== "closed" && (
+                          <DropdownMenuItem 
+                            className="cursor-pointer"
+                            onClick={() => toggleCampaignStatus(campaign.id, "closed")}
+                          >
+                            <Archive size={14} className="mr-2" /> Close Campaign
+                          </DropdownMenuItem>
+                        )}
+                        
+                        <DropdownMenuSeparator />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem 
+                              className="text-destructive cursor-pointer"
+                              onSelect={(e) => e.preventDefault()}
+                            >
+                              <Trash2 size={14} className="mr-2" /> Delete Campaign
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="glass-card border-destructive/20">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete your campaign
+                                and all associated influencer applications.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="glass-card">Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => deleteCampaign(campaign.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge variant="outline">{campaign.city}</Badge>
-                  <Badge variant="outline">{campaign.niche}</Badge>
-                  {(campaign.target_platforms || []).map((platform) => (
-                    <Badge key={platform} variant="outline">{platform}</Badge>
+              </div>
+
+              <div className="mt-4">
+                <p className="text-muted-foreground text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                  {campaign.description}
+                </p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {campaign.deliverables.map((item) => (
+                    <Badge key={item} variant="outline" className="px-3.5 py-1.5 bg-white border-slate-200 text-slate-700 font-semibold tracking-tight rounded-full text-[11px] hover:bg-slate-50 transition-colors">
+                      {item}
+                    </Badge>
                   ))}
-                  {campaign.min_followers ? <Badge variant="outline">{campaign.min_followers.toLocaleString()}+ followers</Badge> : null}
-                  {campaign.min_engagement_rate ? <Badge variant="outline">{campaign.min_engagement_rate}%+ engagement</Badge> : null}
-                  {campaign.verified_socials_only ? <Badge variant="outline">Verified socials only</Badge> : null}
-                  {campaign.portfolio_required ? <Badge variant="outline">Portfolio required</Badge> : null}
-                </div>
-                {eligibility && !eligibility.eligible && (
-                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
-                    <p className="font-semibold">Why you can't apply yet</p>
-                    <ul className="mt-1 space-y-1 text-xs">
-                      {eligibility.reasons.map((reason) => (
-                        <li key={reason}>• {reason}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <div className="p-4 rounded-xl bg-muted/50">
-                  <div className="flex items-center gap-1 text-foreground font-bold text-lg">
-                    <IndianRupee size={16} /> {campaign.budget.toLocaleString()}
-                  </div>
-                  <span className="text-sm text-muted-foreground">Budget</span>
-                </div>
-                <div className="p-4 rounded-xl bg-muted/50">
-                  <div className="flex items-center gap-1 text-foreground font-bold text-lg">
-                    <Users size={16} /> {campaign.influencers_needed}
-                  </div>
-                  <span className="text-sm text-muted-foreground">Influencers needed</span>
                 </div>
               </div>
 
-              <div className="mt-5">
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">{applicationCount} applied</span>
-                  <span className="text-muted-foreground">{campaign.influencers_needed} needed</span>
+              <div className="mt-8 rounded-3xl border border-slate-100 bg-slate-50/40 p-6 overflow-hidden">
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">Creator Requirements</h4>
+                  <Badge variant="outline" className="rounded-full border-amber-200 text-amber-700 bg-white px-3 py-1 text-[10px] font-bold shadow-sm">
+                    Check fit
+                  </Badge>
                 </div>
-                <Progress value={Math.min(progress, 100)} className="h-2" />
+                <p className="text-[11px] text-slate-400 font-medium mb-5">Built from the same profile information creators submit.</p>
+                
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="bg-white border-slate-200 text-slate-700 rounded-full px-3.5 py-0.5 font-bold text-[11px]">{campaign.city}</Badge>
+                    <Badge variant="outline" className="bg-white border-slate-200 text-slate-700 rounded-full px-3.5 py-0.5 font-bold text-[11px]">{campaign.niche}</Badge>
+                    {(campaign.target_platforms || []).map((platform) => (
+                      <Badge key={platform} variant="outline" className="bg-white border-slate-200 text-slate-700 rounded-full px-3.5 py-0.5 font-bold text-[11px] capitalize">{platform}</Badge>
+                    ))}
+                  </div>
+                  
+                  {eligibility && !eligibility.eligible && (
+                    <div className="rounded-[20px] border border-amber-100 bg-amber-50/50 p-5 shadow-sm">
+                      <p className="font-bold text-[14px] text-amber-900/90 mb-2.5">
+                        Why you can't apply yet
+                      </p>
+                      <ul className="space-y-2 text-[13px] text-amber-800/90 font-medium list-none pl-0">
+                        {eligibility.reasons.map((reason) => (
+                          <li key={reason} className="flex items-start gap-2 leading-snug">
+                            <span className="text-amber-400 text-[18px] leading-none">•</span>
+                            <span>{reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {eligibility && eligibility.eligible && (
+                    <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm text-xs text-emerald-800 flex items-center gap-2 font-bold uppercase tracking-wider">
+                      <CheckCircle size={16} className="text-emerald-500" /> You meet all requirements!
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-8">
+                <div className="p-6 rounded-[24px] bg-slate-50/40 border border-slate-100">
+                  <div className="flex items-center gap-2 text-foreground font-display font-bold text-2xl mb-1 tracking-tight">
+                    <IndianRupee size={22} className="text-slate-400 -mt-1" strokeWidth={2.5} /> {campaign.budget.toLocaleString()}
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Budget</span>
+                </div>
+                <div className="p-6 rounded-[24px] bg-slate-50/40 border border-slate-100">
+                  <div className="flex items-center gap-2 text-foreground font-display font-bold text-2xl mb-1 tracking-tight">
+                    <Users size={22} className="text-slate-400 -mt-1" strokeWidth={2.5} /> {campaign.influencers_needed}
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Creators needed</span>
+                </div>
+              </div>
+
+              <div className="mt-8 pb-4">
+                <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider mb-2 text-slate-400">
+                  <span>{applicationCount} applied</span>
+                  <span>{campaign.influencers_needed} needed</span>
+                </div>
+                <Progress value={Math.min(progress, 100)} className="h-2 rounded-full bg-slate-100" />
               </div>
 
               {(!canApply || campaign.status !== "active") && (
@@ -770,66 +876,83 @@ const CampaignDetail = () => {
             </CardContent>
           </Card>
         </motion.div>
-
         {/* Chat & Review for accepted influencer */}
         {!isOwner && user && myApplication?.status === "accepted" && campaign && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-6 space-y-4">
-            <Card className="glass-card">
-              <CardContent className="p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Collaboration Workspace</p>
-                    <h2 className="mt-1 font-display text-xl font-bold text-foreground">Working with {campaign.brand}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {collaborationStage(bookingStatusByApplication[myApplication.id]).description}
-                    </p>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-6">
+            <Accordion type="single" collapsible defaultValue="workspace" className="w-full">
+              <AccordionItem value="workspace" className="border rounded-xl bg-card px-4 border-slate-200">
+                <AccordionTrigger className="hover:no-underline py-4">
+                  <div className="flex items-center gap-2">
+                    <Zap size={16} className="text-primary" />
+                    <span className="font-semibold">Collaboration with {campaign.brand}</span>
                   </div>
-                  <Badge variant="outline" className={`w-fit border px-3 py-1 text-xs font-semibold ${collaborationStage(bookingStatusByApplication[myApplication.id]).tone}`}>
-                    {collaborationStage(bookingStatusByApplication[myApplication.id]).label}
-                  </Badge>
-                </div>
+                </AccordionTrigger>
+                <AccordionContent className="pb-4 space-y-4 pt-1">
+                  <div className="rounded-xl border bg-muted/30 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Workspace Status</p>
+                        <h3 className="mt-1 font-display text-lg font-bold text-foreground">
+                          {collaborationStage(bookingStatusByApplication[myApplication.id]).label}
+                        </h3>
+                        <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                          {collaborationStage(bookingStatusByApplication[myApplication.id]).description}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={`w-fit border px-3 py-1 text-xs font-semibold ${collaborationStage(bookingStatusByApplication[myApplication.id]).tone}`}>
+                        {bookingStatusByApplication[myApplication.id] || "Pending"}
+                      </Badge>
+                    </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-xl border bg-muted/30 px-3 py-3">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Application</div>
-                    <div className="mt-1 text-sm font-semibold text-foreground">Accepted</div>
-                  </div>
-                  <div className="rounded-xl border bg-muted/30 px-3 py-3">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Booking</div>
-                    <div className="mt-1 text-sm font-semibold capitalize text-foreground">
-                      {bookingStatusByApplication[myApplication.id] || "Not created"}
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="rounded-xl border bg-background px-3 py-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Application</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">Accepted</div>
+                      </div>
+                      <div className="rounded-xl border bg-background px-3 py-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Booking</div>
+                        <div className="mt-1 text-sm font-semibold capitalize text-foreground">
+                          {bookingStatusByApplication[myApplication.id] || "Not created"}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border bg-background px-3 py-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Review</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">
+                          {bookingStatusByApplication[myApplication.id] === "completed" ? "Ready" : "Locked"}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="rounded-xl border bg-muted/30 px-3 py-3">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Review</div>
-                    <div className="mt-1 text-sm font-semibold text-foreground">
-                      {bookingStatusByApplication[myApplication.id] === "completed" ? "Ready" : "Locked"}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            <h2 className="font-display font-bold text-xl">Chat with {campaign.brand}</h2>
-            <ChatThread
-              applicationId={myApplication.id}
-              campaignId={campaign.id}
-              otherUserId={campaign.user_id}
-              otherUserName={campaign.brand}
-            />
-            {bookingStatusByApplication[myApplication.id] === "completed" && (
-              <>
-                <h2 className="font-display font-bold text-xl">Leave a Review</h2>
-                <ReviewForm
-                  campaignId={campaign.id}
-                  revieweeId={campaign.user_id}
-                  reviewerType="influencer"
-                  revieweeName={campaign.brand}
-                />
-              </>
-            )}
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-200 h-[450px] overflow-hidden">
+                      <ChatThread
+                        applicationId={myApplication.id}
+                        campaignId={campaign.id}
+                        otherUserId={campaign.user_id}
+                        otherUserName={campaign.brand}
+                        hideIntro={true}
+                      />
+                    </div>
+
+                    {bookingStatusByApplication[myApplication.id] === "completed" && (
+                      <div className="mt-4 pt-4 border-t">
+                        <h4 className="font-display font-bold text-lg mb-3">Leave a Review</h4>
+                        <ReviewForm
+                          campaignId={campaign.id}
+                          revieweeId={campaign.user_id}
+                          reviewerType="influencer"
+                          revieweeName={campaign.brand}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </motion.div>
         )}
+
 
         {/* Applicants section - only visible to campaign owner */}
         {isOwner && (
@@ -911,67 +1034,71 @@ const CampaignDetail = () => {
                                 <XCircle size={14} className="mr-1" /> Reject
                               </Button>
                             </div>
-                          )}
-
-                          {app.status === "accepted" && (
-                            <div className="mt-3 space-y-3">
-                              <div className="rounded-xl border bg-muted/30 p-3">
-                                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                                  <div>
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Collaboration Workspace</p>
-                                    <p className="mt-1 text-sm font-semibold text-foreground">
-                                      {collaborationStage(bookingStatusByApplication[app.id]).label}
-                                    </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      {collaborationStage(bookingStatusByApplication[app.id]).description}
-                                    </p>
-                                  </div>
-                                  <Badge variant="outline" className={`w-fit border px-2.5 py-1 text-[11px] font-semibold ${collaborationStage(bookingStatusByApplication[app.id]).tone}`}>
-                                    {bookingStatusByApplication[app.id] || "No booking"}
-                                  </Badge>
-                                </div>
-
-                                <div className="mt-3 grid gap-2 md:grid-cols-3">
-                                  <div className="rounded-lg border bg-background px-3 py-2">
-                                    <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Application</div>
-                                    <div className="mt-1 text-xs font-semibold text-foreground">Accepted</div>
-                                  </div>
-                                  <div className="rounded-lg border bg-background px-3 py-2">
-                                    <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Booking</div>
-                                    <div className="mt-1 text-xs font-semibold capitalize text-foreground">
-                                      {bookingStatusByApplication[app.id] || "Not created"}
+                          )}                          {app.status === "accepted" && (
+                            <div className="mt-4">
+                              <Accordion type="single" collapsible className="w-full">
+                                <AccordionItem value="collaboration" className="border rounded-xl bg-card px-4 border-slate-200">
+                                  <AccordionTrigger className="hover:no-underline py-3">
+                                    <div className="flex items-center gap-2">
+                                      <Zap size={14} className="text-primary" />
+                                      <span className="font-semibold text-xs text-slate-700">Collaboration Details</span>
                                     </div>
-                                  </div>
-                                  <div className="rounded-lg border bg-background px-3 py-2">
-                                    <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Review</div>
-                                    <div className="mt-1 text-xs font-semibold text-foreground">
-                                      {bookingStatusByApplication[app.id] === "completed" ? "Ready" : "Locked"}
+                                  </AccordionTrigger>
+                                  <AccordionContent className="pb-4 space-y-4 pt-1">
+                                    <div className="rounded-xl border bg-muted/30 p-3">
+                                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Workspace Status</p>
+                                          <p className="mt-1 text-sm font-semibold text-foreground">
+                                            {collaborationStage(bookingStatusByApplication[app.id]).label}
+                                          </p>
+                                          <p className="mt-1 text-xs text-muted-foreground">
+                                            {collaborationStage(bookingStatusByApplication[app.id]).description}
+                                          </p>
+                                        </div>
+                                        <Badge variant="outline" className={`w-fit border px-2.5 py-1 text-[11px] font-semibold ${collaborationStage(bookingStatusByApplication[app.id]).tone}`}>
+                                          {bookingStatusByApplication[app.id] || "No booking"}
+                                        </Badge>
+                                      </div>
+
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {bookingStatusByApplication[app.id] !== "completed" ? (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 text-[10px] font-bold uppercase tracking-tight"
+                                            onClick={() => setBookingTarget(app)}
+                                          >
+                                            <ClipboardList size={12} className="mr-1" /> {bookingStatusByApplication[app.id] ? "Update Booking" : "Create Booking"}
+                                          </Button>
+                                        ) : (
+                                          <ReviewForm
+                                            campaignId={campaign.id}
+                                            revieweeId={app.user_id}
+                                            reviewerType="brand"
+                                            revieweeName={profile?.name || "Influencer"}
+                                            trigger={
+                                              <Button size="sm" variant="outline" className="h-8 text-[10px] font-bold uppercase tracking-tight">
+                                                <Star size={12} className="mr-1" /> Leave Review
+                                              </Button>
+                                            }
+                                          />
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="w-full"
-                                onClick={() => setBookingTarget(app)}
-                              >
-                                Create Booking
-                              </Button>
-                              <ChatThread
-                                applicationId={app.id}
-                                campaignId={campaign.id}
-                                otherUserId={app.user_id}
-                                otherUserName={profile?.name || "Influencer"}
-                              />
-                              {bookingStatusByApplication[app.id] === "completed" && (
-                                <ReviewForm
-                                  campaignId={campaign.id}
-                                  revieweeId={app.user_id}
-                                  reviewerType="brand"
-                                  revieweeName={profile?.name || "Influencer"}
-                                />
-                              )}
+
+                                    <div className="rounded-xl border border-slate-200 h-[400px] overflow-hidden">
+                                      <ChatThread
+                                        applicationId={app.id}
+                                        campaignId={campaign.id}
+                                        otherUserId={app.user_id}
+                                        otherUserName={profile?.name || "Influencer"}
+                                        hideIntro={true}
+                                      />
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              </Accordion>
                             </div>
                           )}
 

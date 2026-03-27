@@ -35,11 +35,11 @@ interface ChatThreadProps {
   otherUserId: string;
   otherUserName: string;
   otherUserAvatar?: string | null;
-  onBack?: () => void;
   onMessageSent?: (message: { content: string; created_at: string; campaign_id: string; application_id: string | null; sender_id: string; receiver_id: string; }) => void;
+  hideIntro?: boolean;
 }
 
-const ChatThread = ({ applicationId, campaignId, campaignLabel, otherUserId, otherUserName, otherUserAvatar, onBack, onMessageSent }: ChatThreadProps) => {
+const ChatThread = ({ applicationId, campaignId, campaignLabel, otherUserId, otherUserName, otherUserAvatar, onBack, onMessageSent, hideIntro }: ChatThreadProps) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -214,7 +214,7 @@ const ChatThread = ({ applicationId, campaignId, campaignLabel, otherUserId, oth
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="space-y-3">
-          {showCampaignIntro && campaignIntro && (
+          {!hideIntro && showCampaignIntro && campaignIntro && (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>

@@ -146,6 +146,10 @@ const UnifiedProfile = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!id || id === "undefined") {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         let targetUserId: string | null = null;

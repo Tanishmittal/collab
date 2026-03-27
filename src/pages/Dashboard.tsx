@@ -5,7 +5,7 @@ import type { NavigateFunction } from "react-router-dom";
 import {
   BarChart3, Users, IndianRupee, Plus, MapPin, Clock,
   CheckCircle, XCircle, MessageSquare, Send, Trash2, Pause, Play, Archive, ShoppingCart, Hourglass, Pencil,
-  Megaphone, Star, TrendingUp, Eye
+  Megaphone, Star, TrendingUp, Eye, MoreVertical
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +15,8 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import {
@@ -101,6 +102,7 @@ const statusConfig: Record<string, { label: string; icon: React.ReactNode; varia
   pending: { label: "Pending", icon: <Hourglass size={12} />, variant: "secondary" },
   accepted: { label: "Accepted", icon: <CheckCircle size={12} />, variant: "default" },
   rejected: { label: "Rejected", icon: <XCircle size={12} />, variant: "destructive" },
+  cancelled: { label: "Cancelled", icon: <Archive size={12} />, variant: "outline" },
 };
 
 const bookingBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
@@ -131,7 +133,7 @@ const collaborationStage = (bookingStatus?: string) => {
     return {
       label: "Ready To Start",
       tone: "border-sky-200 bg-sky-50 text-sky-700",
-      description: "Booking is accepted and ready to move into execution.",
+      description: "Booking accepted by influencer. Brand can start work.",
     };
   }
 
@@ -148,6 +150,14 @@ const collaborationStage = (bookingStatus?: string) => {
       label: "Completed",
       tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
       description: "Collaboration is finished and review can be left.",
+    };
+  }
+
+  if (bookingStatus === "cancelled") {
+    return {
+      label: "Cancelled",
+      tone: "border-slate-200 bg-slate-50 text-slate-400",
+      description: "This collaboration has been cancelled.",
     };
   }
 
@@ -346,74 +356,38 @@ const Dashboard = () => {
     }
 
     if (status === "accepted") {
-      const { data: campaign, error: campaignError } = await supabase
-        .from("campaigns")
-        .select("id, user_id, brand, influencers_needed, status, expires_at")
-        .eq("id", application.campaign_id)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc('accept_campaign_application', { p_application_id: appId });
 
-      if (campaignError || !campaign) {
-        toast({ title: "Error", description: campaignError?.message || "Campaign not found.", variant: "destructive" });
+      if (error || !data?.success) {
+        toast({ title: "Error", description: error?.message || data?.error || "Failed to accept application", variant: "destructive" });
         return;
       }
 
-      const isExpired = campaign.expires_at ? new Date(campaign.expires_at).getTime() < Date.now() : false;
-      if (campaign.status !== "active" || isExpired) {
-        toast({ title: "Campaign unavailable", description: "Only active, non-expired campaigns can accept applications.", variant: "destructive" });
-        return;
-      }
-
-      const { count: acceptedCount, error: acceptedCountError } = await supabase
-        .from("campaign_applications")
-        .select("*", { count: "exact", head: true })
-        .eq("campaign_id", application.campaign_id)
-        .eq("status", "accepted");
-
-      if (acceptedCountError) {
-        toast({ title: "Error", description: acceptedCountError.message, variant: "destructive" });
-        return;
-      }
-
-      if ((acceptedCount || 0) >= campaign.influencers_needed) {
-        toast({ title: "Campaign full", description: "All creator slots are already filled.", variant: "destructive" });
-        return;
-      }
-
-      const { error } = await supabase.from("campaign_applications").update({ status }).eq("id", appId);
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        return;
-      }
-
-      const nextAcceptedCount = (acceptedCount || 0) + 1;
-      if (nextAcceptedCount >= campaign.influencers_needed) {
-        await supabase.from("campaigns").update({ status: "closed" }).eq("id", campaign.id);
-        await rejectPendingApplicationsForCampaign(campaign.id);
-      }
+      const { campaign_id, brand_user_id, brand_name, influencer_user_id } = data;
 
       const { count: existingMessagesCount } = await supabase
         .from("messages")
         .select("*", { count: "exact", head: true })
-        .eq("application_id", application.id);
+        .eq("application_id", appId);
 
       if (!existingMessagesCount) {
         await supabase.from("messages").insert({
-          application_id: application.id,
-          campaign_id: application.campaign_id,
-          sender_id: campaign.user_id,
-          receiver_id: application.user_id,
-          content: `Your application for ${campaign.brand} has been accepted. You can chat here to coordinate next steps.`,
+          application_id: appId,
+          campaign_id,
+          sender_id: brand_user_id,
+          receiver_id: influencer_user_id,
+          content: `Your application for ${brand_name} has been accepted. You can chat here to coordinate next steps.`,
           read: false,
         });
       }
 
       await createNotification({
-        userId: application.user_id,
+        userId: influencer_user_id,
         type: "campaign_application_accepted",
         title: "Application accepted",
-        body: `Your application for ${campaign.brand} was accepted.`,
-        actionUrl: `/campaign/${campaign.id}`,
-        metadata: { campaignId: campaign.id, applicationId: application.id },
+        body: `Your application for ${brand_name} was accepted.`,
+        actionUrl: `/campaign/${campaign_id}`,
+        metadata: { campaignId: campaign_id, applicationId: appId },
       }).catch(() => undefined);
 
       refetch();
@@ -527,6 +501,7 @@ const Dashboard = () => {
   const applications = dashboardData?.applications_received || [];
   const myApplications = dashboardData?.my_applications || [];
   const bookings = dashboardData?.bookings || [];
+  const influencerProfile = dashboardData?.influencer_profile;
   const pendingApps = applications.filter(a => a.status === "pending");
   const getCampaignName = (campaignId: string) => campaigns.find(c => c.id === campaignId)?.brand || "Unknown";
   const currentStats = activeRole === "brand" ? brandStats : influencerStatsCards;
@@ -611,6 +586,7 @@ const Dashboard = () => {
                 deleteCampaign={deleteCampaign}
                 updateBookingStatus={updateBookingStatus}
                 hasBrandProfile={hasBrandProfile}
+                openBrandProfile={openBrandProfile}
               />
             </motion.div>
           ) : (
@@ -619,9 +595,11 @@ const Dashboard = () => {
                 myApplications={myApplications}
                 bookings={bookings.filter(b => b.influencer_user_id === user.id)}
                 hasProfile={hasInfluencerProfile}
-                profileStats={dashboardData?.influencer_profile}
+                profileStats={influencerProfile}
                 navigate={navigate}
                 updateBookingStatus={updateBookingStatus}
+                updateApplicationStatus={updateApplicationStatus}
+                openBrandProfile={openBrandProfile}
               />
             </motion.div>
           )}
@@ -644,14 +622,18 @@ interface BrandDashboardProps {
   deleteCampaign: (id: string) => void;
   updateBookingStatus: (id: string, status: string) => void;
   hasBrandProfile: boolean;
+  openBrandProfile: (event: React.MouseEvent, userId?: string | null) => void;
 }
 
-const BrandDashboard = ({
+function BrandDashboard({
   campaigns, applications, bookings, pendingApps, getCampaignName,
   navigate,
   updateApplicationStatus, toggleCampaignStatus, deleteCampaign, updateBookingStatus,
-  hasBrandProfile
-}: BrandDashboardProps) => (
+  hasBrandProfile,
+  openBrandProfile
+}: BrandDashboardProps) {
+
+  return (
   <Tabs defaultValue="campaigns" className="w-full">
     <TabsList className="mb-4 grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-3">
       <TabsTrigger value="campaigns" className="font-display text-xs">Campaigns</TabsTrigger>
@@ -694,7 +676,10 @@ const BrandDashboard = ({
 
             return (
               <motion.div key={c.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                <Card className="glass-card hover:shadow-lg transition-shadow">
+                <Card 
+                  className="glass-card hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => navigate(`/campaign/${c.id}`)}
+                >
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-center gap-3 min-w-0">
@@ -709,7 +694,10 @@ const BrandDashboard = ({
                         <div className="min-w-0">
                           <button
                             type="button"
-                            onClick={(event) => openBrandProfile(event, c.user_id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/campaign/${c.id}`);
+                            }}
                             className="block truncate text-left font-display text-sm font-semibold text-foreground transition-colors hover:text-primary"
                           >
                             {c.brand}
@@ -719,61 +707,95 @@ const BrandDashboard = ({
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto" onClick={(e) => e.stopPropagation()}>
+                        <Badge
+                          variant={
+                            c.status === "active"
+                              ? "default"
+                              : c.status === "paused"
+                                ? "outline"
+                                : c.status === "completed"
+                                  ? "default"
+                                  : "secondary"
+                          }
+                          className={`text-[10px] h-5 px-2 ${
+                            c.status === "active"
+                              ? "gradient-primary border-0 text-primary-foreground"
+                              : c.status === "paused"
+                                ? "border-warning text-warning"
+                                : c.status === "completed"
+                                  ? "border-0 bg-emerald-100 text-emerald-700 font-medium"
+                                  : ""
+                          }`}
+                        >
+                          {c.status === "active" && <Play size={8} className="mr-0.5 fill-current" />}
+                          {c.status === "paused" && <Pause size={8} className="mr-0.5 fill-current" />}
+                          {c.status === "closed" && <Archive size={8} className="mr-0.5" />}
+                          {c.status === "completed" && <CheckCircle size={8} className="mr-0.5" />}
+                          {c.status}
+                        </Badge>
+                        
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Badge
-                              variant={
-                                c.status === "active"
-                                  ? "default"
-                                  : c.status === "paused"
-                                    ? "outline"
-                                    : c.status === "completed"
-                                      ? "default"
-                                      : "secondary"
-                              }
-                              className={`cursor-pointer text-[10px] h-5 ${
-                                c.status === "active"
-                                  ? "gradient-primary border-0 text-primary-foreground"
-                                  : c.status === "paused"
-                                    ? "border-warning text-warning"
-                                    : c.status === "completed"
-                                      ? "border-0 bg-emerald-100 text-emerald-700"
-                                      : ""
-                              }`}
-                            >
-                              {c.status === "active" && <Play size={8} className="mr-0.5" />}
-                              {c.status === "paused" && <Pause size={8} className="mr-0.5" />}
-                              {c.status === "closed" && <Archive size={8} className="mr-0.5" />}
-                              {c.status === "completed" && <CheckCircle size={8} className="mr-0.5" />}
-                              {c.status}
-                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted">
+                              <MoreVertical size={16} className="text-muted-foreground" />
+                            </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold px-2 py-1.5">Actions</DropdownMenuLabel>
                             {c.status !== "completed" && (
-                              <DropdownMenuItem onClick={() => navigate(`/edit-campaign/${c.id}`)} className="gap-2">
-                                <Pencil size={14} /> Edit
+                              <DropdownMenuItem onClick={() => navigate(`/edit-campaign/${c.id}`)} className="gap-2 cursor-pointer">
+                                <Pencil size={14} /> Edit Campaign
                               </DropdownMenuItem>
                             )}
-                            {c.status !== "active" && c.status !== "completed" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "active")} className="gap-2 text-success"><Play size={14} /> Set Active</DropdownMenuItem>}
-                            {c.status !== "paused" && c.status !== "completed" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "paused")} className="gap-2 text-warning"><Pause size={14} /> Pause</DropdownMenuItem>}
-                            {c.status !== "closed" && c.status !== "completed" && <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "closed")} className="gap-2 text-muted-foreground"><Archive size={14} /> Close</DropdownMenuItem>}
-                            {c.status === "completed" && (
-                              <DropdownMenuItem disabled className="gap-2 text-muted-foreground">
-                                <CheckCircle size={14} /> Completed
+                            
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold px-2 py-1.5">Status</DropdownMenuLabel>
+                            
+                            {c.status !== "active" && c.status !== "completed" && (
+                              <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "active")} className="gap-2 text-success cursor-pointer">
+                                <Play size={14} /> Set Active
                               </DropdownMenuItem>
                             )}
+                            {c.status !== "paused" && c.status !== "completed" && (
+                              <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "paused")} className="gap-2 text-warning cursor-pointer">
+                                <Pause size={14} /> Pause
+                              </DropdownMenuItem>
+                            )}
+                            {c.status !== "closed" && c.status !== "completed" && (
+                              <DropdownMenuItem onClick={() => toggleCampaignStatus(c.id, "closed")} className="gap-2 text-muted-foreground cursor-pointer">
+                                <Archive size={14} /> Close
+                              </DropdownMenuItem>
+                            )}
+                            
+                            <DropdownMenuSeparator />
+                            
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="gap-2 text-destructive cursor-pointer">
+                                  <Trash2 size={14} /> Delete Campaign
+                                </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete "{c.brand}" and all its applications. This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => deleteCampaign(c.id)} 
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"><Trash2 size={13} /></Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>Delete campaign?</AlertDialogTitle><AlertDialogDescription>This will permanently delete "{c.brand}" and all its applications.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => deleteCampaign(c.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
                       </div>
                     </div>
 
@@ -938,6 +960,55 @@ const BrandDashboard = ({
                       <Badge variant={booking.status === "accepted" ? "default" : booking.status === "rejected" ? "destructive" : "secondary"} className="text-[10px]">{booking.status}</Badge>
                     </div>
                   </div>
+                  
+                  <Accordion type="single" collapsible className="mt-3 w-full border-t border-slate-100">
+                    <AccordionItem value="details" className="border-none">
+                      <AccordionTrigger className="text-xs py-2 hover:no-underline text-muted-foreground">
+                        Booking Details
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-1 pb-3">
+                        <div className="space-y-2 text-xs">
+                          <div className="rounded-lg bg-slate-50 p-3 space-y-2">
+                            <h4 className="font-medium text-slate-700">Line Items</h4>
+                            {Array.isArray(booking.items) && booking.items.map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between text-slate-600">
+                                <span>{item.description}</span>
+                                <span className="font-medium">₹{item.price.toLocaleString()}</span>
+                              </div>
+                            ))}
+                            <div className="pt-2 border-t border-slate-200 flex justify-between font-semibold text-slate-900">
+                              <span>Total</span>
+                              <span>₹{booking.total_amount.toLocaleString()}</span>
+                            </div>
+                          </div>
+                          {booking.notes && (
+                            <div className="rounded-lg bg-slate-50 p-3">
+                              <h4 className="font-medium text-slate-700 mb-1">Notes</h4>
+                              <p className="text-slate-600 italic">"{booking.notes}"</p>
+                            </div>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {booking.status === "accepted" && (
+                      <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-8 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "in_progress")}><Play size={12} className="mr-1" /> Start Work</Button>
+                    )}
+                    {booking.status === "in_progress" && (
+                      <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-8 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "completed")}><CheckCircle size={12} className="mr-1" /> Mark Complete</Button>
+                    )}
+                    {(booking.status === "pending" || booking.status === "accepted") && (
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="h-8 px-3 text-xs text-destructive hover:bg-destructive/10" 
+                        onClick={() => updateBookingStatus(booking.id, "cancelled")}
+                      >
+                        <Archive size={12} className="mr-1" /> Cancel Booking
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -946,7 +1017,8 @@ const BrandDashboard = ({
       )}
     </TabsContent>
   </Tabs>
-);
+  );
+}
 
 // ==================== INFLUENCER DASHBOARD ====================
 interface InfluencerDashboardProps {
@@ -956,11 +1028,14 @@ interface InfluencerDashboardProps {
   profileStats: { name: string; followers: string; rating: number | null; engagement_rate: string | null } | null;
   navigate: NavigateFunction;
   updateBookingStatus: (id: string, status: string) => void;
+  updateApplicationStatus: (id: string, status: string) => void;
+  openBrandProfile: (event: React.MouseEvent, userId?: string | null) => void;
 }
 
-const InfluencerDashboard = ({
-  myApplications, bookings, hasProfile, profileStats, navigate, updateBookingStatus,
-}: InfluencerDashboardProps) => {
+function InfluencerDashboard({
+  myApplications, bookings, hasProfile, profileStats, navigate, 
+  updateBookingStatus, updateApplicationStatus, openBrandProfile,
+}: InfluencerDashboardProps) {
   const bookingByApplication = new Map(
     bookings
       .filter((booking) => booking.application_id)
@@ -1066,8 +1141,23 @@ const InfluencerDashboard = ({
                           <p className="mt-2 text-[11px] text-muted-foreground">{stage.description}</p>
                         </div>
                       )}
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-2">
-                        <Clock size={10} /> Applied {new Date(app.created_at).toLocaleDateString()}
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Clock size={10} /> Applied {new Date(app.created_at).toLocaleDateString()}
+                        </div>
+                        {app.status === "pending" && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 px-2 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateApplicationStatus(app.id, "cancelled");
+                            }}
+                          >
+                            Cancel Application
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1113,15 +1203,45 @@ const InfluencerDashboard = ({
                       </div>
                       <div className="flex items-center gap-1.5 self-start sm:self-auto">
                         <span className="font-bold text-xs flex items-center"><IndianRupee size={10} />{booking.total_amount.toLocaleString()}</span>
-                      <Badge variant={bookingBadgeVariant(booking.status)} className="text-[10px]">{booking.status}</Badge>
+                        <Badge variant={bookingBadgeVariant(booking.status)} className="text-[10px]">{booking.status}</Badge>
+                      </div>
                     </div>
-                  </div>
-                  {booking.campaign_id && (
-                    <div className="mt-2 text-[10px] text-muted-foreground">
-                      <Link to={`/campaign/${booking.campaign_id}`} state={{ backTo: "/dashboard" }} className="text-primary hover:underline">Open linked campaign</Link>
-                    </div>
-                  )}
-                  {booking.notes && <p className="text-[11px] text-muted-foreground mt-2 bg-muted/30 rounded-lg p-2">{booking.notes}</p>}
+                    {booking.campaign_id && (
+                      <div className="mt-2 text-[10px] text-muted-foreground">
+                        <Link to={`/campaign/${booking.campaign_id}`} state={{ backTo: "/dashboard" }} className="text-primary hover:underline">Open linked campaign</Link>
+                      </div>
+                    )}
+                    
+                    <Accordion type="single" collapsible className="mt-3 w-full border-t border-slate-100">
+                      <AccordionItem value="details" className="border-none">
+                        <AccordionTrigger className="text-xs py-2 hover:no-underline text-muted-foreground">
+                          Booking Details
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-1 pb-3">
+                          <div className="space-y-2 text-xs">
+                            <div className="rounded-lg bg-slate-50 p-3 space-y-2">
+                              <h4 className="font-medium text-slate-700">Line Items</h4>
+                              {Array.isArray(booking.items) && booking.items.map((item: any, idx: number) => (
+                                <div key={idx} className="flex justify-between text-slate-600">
+                                  <span>{item.description}</span>
+                                  <span className="font-medium">₹{item.price.toLocaleString()}</span>
+                                </div>
+                              ))}
+                              <div className="pt-2 border-t border-slate-200 flex justify-between font-semibold text-slate-900">
+                                <span>Total</span>
+                                <span>₹{booking.total_amount.toLocaleString()}</span>
+                              </div>
+                            </div>
+                            {booking.notes && (
+                              <div className="rounded-lg bg-slate-50 p-3">
+                                <h4 className="font-medium text-slate-700 mb-1">Notes</h4>
+                                <p className="text-slate-600 italic">"{booking.notes}"</p>
+                              </div>
+                            )}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
                   {booking.status === "pending" && (
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-8 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "accepted")}><CheckCircle size={12} className="mr-1" /> Accept</Button>
@@ -1129,12 +1249,10 @@ const InfluencerDashboard = ({
                     </div>
                   )}
                   {booking.status === "accepted" && (
-                    <div className="mt-3 text-[11px] text-muted-foreground">The brand will start this booking when work begins.</div>
+                    <div className="mt-3 text-[11px] text-muted-foreground">Waiting for the brand to start work.</div>
                   )}
                   {booking.status === "in_progress" && (
-                    <div className="flex gap-2 mt-3">
-                      <Button size="sm" className="gradient-primary border-0 text-primary-foreground h-7 px-3 text-xs" onClick={() => updateBookingStatus(booking.id, "completed")}><CheckCircle size={12} className="mr-1" /> Mark Complete</Button>
-                    </div>
+                    <div className="mt-3 text-[11px] text-muted-foreground">Work in progress. The brand will mark this complete when done.</div>
                   )}
                 </CardContent>
               </Card>
@@ -1145,6 +1263,6 @@ const InfluencerDashboard = ({
       </TabsContent>
     </Tabs>
   );
-};
+}
 
 export default Dashboard;
