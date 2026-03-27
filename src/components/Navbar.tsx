@@ -89,7 +89,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
         ) : (
           /* Full: logo + sign-in / bell */
           <div className="container flex items-center justify-between h-14">
-            <Link to="/" className="flex items-center gap-2.5 group">
+            <Link to="/" className="flex items-center">
               <img
                 src="/influgal_icon.png"
                 alt="Influgal"
@@ -116,7 +116,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
       {/* ── DESKTOP HEADER (Guest only or specific pages) ── */}
       <div className={cn("hidden md:block", user && "md:hidden")}>
         <div className="container flex items-center justify-between h-16 lg:h-20">
-          <Link to="/" className="flex items-center gap-3.5 group shrink-0">
+          <Link to="/" className="flex items-center group shrink-0">
             <img
               src="/influgal_icon.png"
               alt="Influgal"
