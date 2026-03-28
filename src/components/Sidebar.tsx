@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useAdminStatus } from "@/hooks/useAdminStatus";
+import { isNativeApp } from "@/lib/platform";
 
 type NavItem = {
   label: string;
@@ -28,6 +30,7 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const { user, influencerId, brandId, signOut } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
+  const { isAdmin } = useAdminStatus();
 
   const handleSignOut = async () => {
     await signOut();
@@ -61,6 +64,9 @@ const Sidebar = () => {
       label: "Account",
       items: [
         { label: "Settings", path: "/settings", icon: Settings2 },
+        ...(!isNativeApp() && isAdmin
+          ? [{ label: "Admin", path: "/admin", icon: Shield }]
+          : []),
       ]
     },
     {

@@ -13,6 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/button
 
 interface Stats {
   totalUsers: number;
+  totalBrands: number;
+  totalInfluencers: number;
+  needsProfile: number;
   activeCampaigns: number;
   totalBookings: number;
   revenue: number;
@@ -26,23 +29,33 @@ export const AdminOverview = () => {
     const fetchStats = async () => {
       try {
         const [
-          { count: brandCount },
-          { count: influencerCount },
+          { data: profileRows, count: totalUserCount },
+          { data: influencerRows },
+          { data: brandRows },
           { count: campaignCount },
           { count: bookingCount },
           { data: bookingData }
         ] = await Promise.all([
-          supabase.from('brand_profiles').select('*', { count: 'exact', head: true }),
-          supabase.from('influencer_profiles').select('*', { count: 'exact', head: true }),
+          supabase.from('profiles').select('user_id', { count: 'exact' }),
+          supabase.from('influencer_profiles').select('user_id'),
+          supabase.from('brand_profiles').select('user_id'),
           supabase.from('campaigns').select('*', { count: 'exact', head: true }).eq('is_active', true),
           supabase.from('bookings').select('*', { count: 'exact', head: true }),
           supabase.from('bookings').select('total_amount').eq('status', 'completed')
         ]);
 
         const totalRevenue = bookingData?.reduce((acc, curr) => acc + (curr.total_amount || 0), 0) || 0;
+        const creatorUserIds = new Set((influencerRows || []).map((row) => row.user_id));
+        const brandUserIds = new Set((brandRows || []).map((row) => row.user_id));
+        const usersWithCompletedProfiles = new Set([...creatorUserIds, ...brandUserIds]);
+        const pendingCount =
+          (profileRows || []).filter((row) => !usersWithCompletedProfiles.has(row.user_id)).length;
 
         setStats({
-          totalUsers: (brandCount || 0) + (influencerCount || 0),
+          totalUsers: totalUserCount || 0,
+          totalBrands: brandUserIds.size,
+          totalInfluencers: creatorUserIds.size,
+          needsProfile: pendingCount,
           activeCampaigns: campaignCount || 0,
           totalBookings: bookingCount || 0,
           revenue: totalRevenue
@@ -66,29 +79,41 @@ export const AdminOverview = () => {
   }
 
   const statCards = [
-    { title: 'Total Users', value: stats?.totalUsers, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+    {
+      title: 'Total Users',
+      value: stats?.totalUsers,
+      icon: Users,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+      meta: `${stats?.totalInfluencers ?? 0} creators • ${stats?.totalBrands ?? 0} brands • ${stats?.needsProfile ?? 0} pending`,
+    },
     { title: 'Active Campaigns', value: stats?.activeCampaigns, icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { title: 'Total Bookings', value: stats?.totalBookings, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
     { title: 'Platform Revenue', value: `$${stats?.revenue.toLocaleString()}`, icon: DollarSign, color: 'text-amber-600', bg: 'bg-amber-50' },
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
         {statCards.map((card) => (
-          <div key={card.title} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className={cn("p-3 rounded-xl", card.bg)}>
-                <card.icon className={cn("h-6 w-6", card.color)} />
+          <div key={card.title} className="bg-white p-3 md:p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow min-h-[128px] md:min-h-[180px]">
+            <div className="flex items-center justify-between mb-3 md:mb-4 gap-2">
+              <div className={cn("p-2 md:p-3 rounded-xl", card.bg)}>
+                <card.icon className={cn("h-4 w-4 md:h-6 md:w-6", card.color)} />
               </div>
-              <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold leading-none bg-emerald-50 px-2 py-1 rounded-full">
-                <ArrowUpRight className="h-3 w-3" />
+              <div className="flex items-center gap-1 text-emerald-600 text-[10px] md:text-xs font-bold leading-none bg-emerald-50 px-1.5 md:px-2 py-1 rounded-full">
+                <ArrowUpRight className="h-2.5 w-2.5 md:h-3 md:w-3" />
                 <span>+12%</span>
               </div>
             </div>
             <div>
-              <p className="text-slate-500 text-sm font-medium">{card.title}</p>
-              <h3 className="text-3xl font-bold text-slate-800 mt-1">{card.value}</h3>
+              <p className="text-slate-500 text-[11px] md:text-sm font-medium leading-snug">{card.title}</p>
+              <h3 className="text-xl md:text-3xl font-bold text-slate-800 mt-1 break-words">{card.value}</h3>
+              {'meta' in card && card.meta && (
+                <p className="mt-1 text-[10px] md:text-xs font-medium text-slate-400 leading-snug">
+                  {card.meta}
+                </p>
+              )}
             </div>
           </div>
         ))}

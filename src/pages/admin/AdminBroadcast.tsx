@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   Loader2,
   Smartphone,
-  Clock3
+  Clock3,
+  Sparkles,
+  UserPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,14 +22,59 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
-type Segment = 'all' | 'influencers' | 'brands';
+type Segment = 'all' | 'influencers' | 'brands' | 'needs_profile';
 type BroadcastRow = Database['public']['Tables']['admin_broadcasts']['Row'];
+type Template = {
+  id: string;
+  label: string;
+  title: string;
+  body: string;
+  segment?: Segment;
+  actionUrl?: string;
+};
+
+const templates: Template[] = [
+  {
+    id: 'finish-onboarding',
+    label: 'Finish Onboarding',
+    title: 'Complete your Influgal profile',
+    body: 'Finish setting up your profile to unlock campaigns, messages, and brand opportunities.',
+    segment: 'needs_profile',
+    actionUrl: '/onboarding',
+  },
+  {
+    id: 'creator-reminder',
+    label: 'Creator Reminder',
+    title: 'Creator profile still pending',
+    body: 'Add your niche, city, and social links to start getting discovered by brands on Influgal.',
+    segment: 'needs_profile',
+    actionUrl: '/onboarding',
+  },
+  {
+    id: 'brand-reminder',
+    label: 'Brand Reminder',
+    title: 'Set up your brand workspace',
+    body: 'Complete your brand profile so you can launch campaigns and connect with creators faster.',
+    segment: 'needs_profile',
+    actionUrl: '/onboarding',
+  },
+  {
+    id: 'new-campaigns',
+    label: 'New Campaign Push',
+    title: 'Fresh campaigns are live',
+    body: 'Open Influgal now to explore the latest opportunities matched to your interests and city.',
+    segment: 'influencers',
+    actionUrl: '/dashboard',
+  },
+];
 
 export default function AdminBroadcast() {
   const [segment, setSegment] = useState<Segment>('all');
   const [city, setCity] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [actionUrl, setActionUrl] = useState<string | undefined>(undefined);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState<BroadcastRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -84,7 +131,9 @@ export default function AdminBroadcast() {
           segment, 
           city: city || undefined, 
           title, 
-          body 
+          body,
+          action_url: actionUrl,
+          data: actionUrl ? { action_url: actionUrl } : undefined,
         }
       });
 
@@ -99,6 +148,8 @@ export default function AdminBroadcast() {
       setTitle('');
       setBody('');
       setCity('');
+      setActionUrl(undefined);
+      setSelectedTemplateId(null);
       loadHistory();
     } catch (err) {
       console.error('Broadcast error:', err);
@@ -131,10 +182,39 @@ export default function AdminBroadcast() {
             </div>
           </div>
 
+          <div className="space-y-3">
+            <label className="text-sm font-semibold text-slate-700">Quick Templates</label>
+            <div className="grid grid-cols-2 gap-2">
+              {templates.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => {
+                    setSelectedTemplateId(template.id);
+                    setTitle(template.title);
+                    setBody(template.body);
+                    setActionUrl(template.actionUrl);
+                    if (template.segment) {
+                      setSegment(template.segment);
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-all",
+                    selectedTemplateId === template.id
+                      ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  )}
+                >
+                  <Sparkles className="h-4 w-4 shrink-0" />
+                  <span className="leading-tight">{template.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Targeting */}
           <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-700">Recipient Segment</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setSegment('all')}
                 className={cn(
@@ -165,7 +245,20 @@ export default function AdminBroadcast() {
                 <Building2 className="h-5 w-5" />
                 <span className="text-[10px] font-bold uppercase tracking-wider">Brands</span>
               </button>
+              <button
+                onClick={() => setSegment('needs_profile')}
+                className={cn(
+                  "flex flex-col items-center gap-2 p-3 rounded-xl border transition-all",
+                  segment === 'needs_profile' ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm" : "border-slate-100 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                )}
+              >
+                <UserPlus className="h-5 w-5" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-center">Needs Profile</span>
+              </button>
             </div>
+            <p className="text-[11px] text-slate-400">
+              "Needs Profile" targets signed-up users who still have not created a creator or brand profile.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -357,6 +450,7 @@ const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
 const formatSegment = (value: string) => {
   if (value === 'influencers') return 'Creators';
   if (value === 'brands') return 'Brands';
+  if (value === 'needs_profile') return 'Needs Profile';
   return 'All Users';
 };
 

@@ -18,6 +18,7 @@ const MobileNav = () => {
 
   // Hide on certain pages or if Native & Unauthenticated
   if (
+    location.pathname.startsWith("/admin") ||
     location.pathname === "/register" || 
     location.pathname === "/register-brand" ||
     (isNativeApp() && !user)

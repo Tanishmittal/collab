@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface PushPayload {
   user_id?: string;
-  segment?: 'all' | 'influencers' | 'brands';
+  segment?: 'all' | 'influencers' | 'brands' | 'needs_profile';
   city?: string;
   title: string;
   body: string;
@@ -46,7 +46,10 @@ function normalizePayload(raw: unknown): PushPayload {
   return {
     user_id: typeof payload.user_id === "string" ? payload.user_id : undefined,
     segment:
-      payload.segment === "all" || payload.segment === "influencers" || payload.segment === "brands"
+      payload.segment === "all" ||
+      payload.segment === "influencers" ||
+      payload.segment === "brands" ||
+      payload.segment === "needs_profile"
         ? payload.segment
         : undefined,
     city: typeof payload.city === "string" && payload.city.trim() ? payload.city.trim() : undefined,
@@ -140,7 +143,30 @@ Deno.serve(async (req) => {
       const { data: audience, error: audienceError } = await audienceQuery;
       if (audienceError) throw audienceError;
 
-      const userIds = [...new Set((audience ?? []).map((profile) => profile.user_id).filter(Boolean))];
+      let userIds = [...new Set((audience ?? []).map((profile) => profile.user_id).filter(Boolean))];
+
+      if (segment === 'needs_profile' && userIds.length > 0) {
+        const [{ data: influencerProfiles, error: influencerError }, { data: brandProfiles, error: brandError }] = await Promise.all([
+          supabaseAdmin
+            .from("influencer_profiles")
+            .select("user_id")
+            .in("user_id", userIds),
+          supabaseAdmin
+            .from("brand_profiles")
+            .select("user_id")
+            .in("user_id", userIds),
+        ]);
+
+        if (influencerError) throw influencerError;
+        if (brandError) throw brandError;
+
+        const completedProfileUserIds = new Set([
+          ...(influencerProfiles ?? []).map((profile) => profile.user_id),
+          ...(brandProfiles ?? []).map((profile) => profile.user_id),
+        ]);
+
+        userIds = userIds.filter((targetUserId) => !completedProfileUserIds.has(targetUserId));
+      }
 
       if (userIds.length === 0) {
         return new Response(JSON.stringify({ success: false, message: "No target users found" }), {

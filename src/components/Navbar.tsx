@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { User, Building2, LogOut, UserCircle, BarChart3, MessageSquare, Bell, ArrowLeft, Settings2 } from "lucide-react";
+import { User, Building2, LogOut, UserCircle, BarChart3, MessageSquare, Bell, ArrowLeft, Settings2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { goBackOr } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useAdminStatus } from "@/hooks/useAdminStatus";
+import { isNativeApp } from "@/lib/platform";
 
 interface NavbarProps {
   variant?: "full" | "minimal";
@@ -23,6 +25,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
   const navigate = useNavigate();
   const { user, loading, influencerId, brandId, signOut } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
+  const { isAdmin } = useAdminStatus();
   const isAuthPage = location.pathname === "/auth";
 
   const handleSignOut = async () => {
@@ -34,6 +37,7 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
     { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
     { label: "Messages", path: "/messages", icon: MessageSquare },
     { label: "Notifications", path: "/notifications", icon: Bell },
+    ...(!isNativeApp() && isAdmin ? [{ label: "Admin", path: "/admin", icon: Shield }] : []),
   ];
   const showMinimalHeaderAction =
     !!user &&
@@ -99,14 +103,25 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
             </Link>
             <div className="flex min-w-10 items-center justify-end">
               {user && (
-                <button
-                  className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative"
-                  onClick={() => navigate("/notifications")}
-                  aria-label={unreadCount > 0 ? `Open notifications, ${unreadCount} unread` : "Open notifications"}
-                >
-                  <Bell size={20} />
-                  {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />}
-                </button>
+                <div className="flex items-center gap-1">
+                  {!isNativeApp() && isAdmin && (
+                    <button
+                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+                      onClick={() => navigate("/admin")}
+                      aria-label="Open admin"
+                    >
+                      <Shield size={20} />
+                    </button>
+                  )}
+                  <button
+                    className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative"
+                    onClick={() => navigate("/notifications")}
+                    aria-label={unreadCount > 0 ? `Open notifications, ${unreadCount} unread` : "Open notifications"}
+                  >
+                    <Bell size={20} />
+                    {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -255,6 +270,14 @@ const Navbar = ({ variant = "full", title }: NavbarProps) => {
                           <span className="text-sm font-medium">Settings</span>
                         </Link>
                       </DropdownMenuItem>
+                      {!isNativeApp() && isAdmin && (
+                        <DropdownMenuItem asChild>
+                          <Link to="/admin" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer">
+                            <Shield className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium">Admin</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={handleSignOut} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer text-red-500 hover:text-red-600">
                         <LogOut className="w-4 h-4" />
