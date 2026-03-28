@@ -10,9 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import StarField from "@/components/ui/StarField";
-
-import { GoogleAuth } from "@codetrix-studio/capacitor-google-auth";
 import { isNativeApp } from "@/lib/platform";
+import { signInWithNativeGoogle } from "@/lib/nativeGoogleAuth";
 
 const stats = [
   { value: "10K+", label: "Creators", icon: Users },
@@ -33,7 +32,7 @@ const NativeLanding = () => {
     setLoading(true);
     try {
       if (isNativeApp()) {
-        const result = await GoogleAuth.signIn();
+        const result = await signInWithNativeGoogle();
         if (result.authentication.idToken) {
           const { error } = await supabase.auth.signInWithIdToken({
             provider: 'google',
@@ -59,7 +58,7 @@ const NativeLanding = () => {
     } catch (error: any) {
       toast({ 
         title: "Google sign-in failed", 
-        description: error.message || "An unexpected error occurred.", 
+        description: error.message || "Native Google sign-in is not available in this build.", 
         variant: "destructive" 
       });
       setLoading(false);

@@ -25,3 +25,4 @@ dist-ssr
 
 # Cache directories
 .npm-cache
+.supabase-secrets.env

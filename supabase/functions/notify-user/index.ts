@@ -13,7 +13,51 @@ interface PushPayload {
   city?: string;
   title: string;
   body: string;
+  message?: string;
+  action_url?: string;
   data?: Record<string, string>;
+}
+
+function getBearerToken(req: Request): string | null {
+  const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+
+  return authHeader.slice("Bearer ".length).trim() || null;
+}
+
+function normalizePayload(raw: unknown): PushPayload {
+  const source =
+    raw && typeof raw === "object" && "body" in raw && raw.body && typeof raw.body === "object"
+      ? raw.body
+      : raw;
+
+  const payload = (source ?? {}) as Record<string, unknown>;
+  const title = typeof payload.title === "string" ? payload.title.trim() : "";
+  const bodySource =
+    typeof payload.body === "string"
+      ? payload.body
+      : typeof payload.message === "string"
+        ? payload.message
+        : "";
+  const body = bodySource.trim();
+
+  return {
+    user_id: typeof payload.user_id === "string" ? payload.user_id : undefined,
+    segment:
+      payload.segment === "all" || payload.segment === "influencers" || payload.segment === "brands"
+        ? payload.segment
+        : undefined,
+    city: typeof payload.city === "string" && payload.city.trim() ? payload.city.trim() : undefined,
+    title,
+    body,
+    action_url: typeof payload.action_url === "string" && payload.action_url.trim() ? payload.action_url.trim() : undefined,
+    data:
+      payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+        ? (payload.data as Record<string, string>)
+        : undefined,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -25,12 +69,132 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+    const bearerToken = getBearerToken(req);
 
-    const { user_id, segment, city, title, body, data } = await req.json() as PushPayload;
+    const rawPayload = await req.json();
+    const { user_id, segment, city, title, body, action_url, data } = normalizePayload(rawPayload);
 
     if (!title || !body || (!user_id && !segment)) {
-      return new Response(JSON.stringify({ error: "Missing required fields (title, body, and either user_id or segment)" }), {
+      return new Response(JSON.stringify({
+        error: "Missing required fields (title, body, and either user_id or segment)",
+        received: {
+          has_user_id: Boolean(user_id),
+          segment: segment ?? null,
+          has_title: Boolean(title),
+          has_body: Boolean(body),
+        },
+      }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Broadcast mode writes notification rows for the matched audience.
+    // The existing DB trigger then calls this function again in single-user mode,
+    // which sends push notifications and also lets web clients receive realtime updates.
+    if (!user_id && segment) {
+      if (!bearerToken) {
+        return new Response(JSON.stringify({ error: "Missing authorization token" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.getUser(bearerToken);
+      if (authUserError || !authUserData.user) {
+        return new Response(JSON.stringify({ error: "Invalid or expired user session" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: adminProfile, error: adminError } = await supabaseAdmin
+        .from("admin_profiles")
+        .select("id")
+        .eq("user_id", authUserData.user.id)
+        .maybeSingle();
+
+      if (adminError) throw adminError;
+      if (!adminProfile) {
+        return new Response(JSON.stringify({ error: "Only admins can send broadcasts" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let audienceQuery = supabaseAdmin
+        .from("profiles")
+        .select("user_id")
+        .eq("notifications_enabled", true);
+
+      if (segment === 'influencers') {
+        audienceQuery = audienceQuery.eq('user_type', 'influencer');
+      } else if (segment === 'brands') {
+        audienceQuery = audienceQuery.eq('user_type', 'brand');
+      }
+
+      if (city) {
+        audienceQuery = audienceQuery.ilike('city', `%${city}%`);
+      }
+
+      const { data: audience, error: audienceError } = await audienceQuery;
+      if (audienceError) throw audienceError;
+
+      const userIds = [...new Set((audience ?? []).map((profile) => profile.user_id).filter(Boolean))];
+
+      if (userIds.length === 0) {
+        return new Response(JSON.stringify({ success: false, message: "No target users found" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const notificationRows = userIds.map((targetUserId) => ({
+        user_id: targetUserId,
+        type: "broadcast",
+        title,
+        body,
+        action_url: action_url ?? data?.action_url ?? null,
+        metadata: {
+          source: "admin_broadcast",
+          segment,
+          city: city ?? null,
+          ...data,
+        },
+      }));
+
+      const { error: insertError } = await supabaseAdmin
+        .from("notifications")
+        .insert(notificationRows);
+
+      if (insertError) throw insertError;
+
+      const { error: broadcastInsertError } = await supabaseAdmin
+        .from("admin_broadcasts")
+        .insert({
+          created_by: authUserData.user.id,
+          segment,
+          city: city ?? null,
+          title,
+          body,
+          recipient_count: userIds.length,
+          sent_count: userIds.length,
+          failed_count: 0,
+          metadata: {
+            action_url: action_url ?? data?.action_url ?? null,
+            mode: "broadcast_notifications",
+            ...data,
+          },
+        });
+
+      if (broadcastInsertError) throw broadcastInsertError;
+
+      return new Response(JSON.stringify({
+        success: true,
+        sent: userIds.length,
+        failed: 0,
+        total: userIds.length,
+        mode: "broadcast_notifications",
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

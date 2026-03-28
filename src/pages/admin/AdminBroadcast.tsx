@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Megaphone, 
   Send, 
@@ -10,15 +10,18 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
-  Smartphone
+  Smartphone,
+  Clock3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 
 type Segment = 'all' | 'influencers' | 'brands';
+type BroadcastRow = Database['public']['Tables']['admin_broadcasts']['Row'];
 
 export default function AdminBroadcast() {
   const [segment, setSegment] = useState<Segment>('all');
@@ -26,7 +29,32 @@ export default function AdminBroadcast() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [history, setHistory] = useState<BroadcastRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const { toast } = useToast();
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('admin_broadcasts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+      if (error) throw error;
+      setHistory(data ?? []);
+    } catch (err) {
+      console.error('Error loading broadcast history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   const handleSend = async () => {
     if (!title || !body) {
@@ -40,7 +68,18 @@ export default function AdminBroadcast() {
 
     setSending(true);
     try {
+      const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) throw refreshError;
+
+      const accessToken = refreshedSession.session?.access_token;
+      if (!accessToken) {
+        throw new Error("Your session has expired. Please sign in again and retry.");
+      }
+
       const { data, error } = await supabase.functions.invoke('notify-user', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: { 
           segment, 
           city: city || undefined, 
@@ -60,11 +99,16 @@ export default function AdminBroadcast() {
       setTitle('');
       setBody('');
       setCity('');
+      loadHistory();
     } catch (err) {
       console.error('Broadcast error:', err);
+      const description =
+        err instanceof Error && err.message
+          ? err.message
+          : "There was an error sending the notifications.";
       toast({
         title: "Broadcast Failed",
-        description: "There was an error sending the notifications.",
+        description,
         variant: "destructive"
       });
     } finally {
@@ -189,6 +233,64 @@ export default function AdminBroadcast() {
             </p>
           </div>
         </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-slate-800">Recent Broadcasts</h3>
+              <p className="text-xs text-slate-400">Latest messages sent from the admin panel</p>
+            </div>
+            <div className="h-10 w-10 bg-slate-50 text-slate-500 rounded-lg flex items-center justify-center">
+              <Clock3 className="h-5 w-5" />
+            </div>
+          </div>
+
+          {historyLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading history...</span>
+            </div>
+          ) : history.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              No broadcasts sent yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {history.map((item) => (
+                <div key={item.id} className="rounded-xl border border-slate-200 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-slate-900 truncate">{item.title}</h4>
+                      <p className="text-sm text-slate-600 line-clamp-2">{item.body}</p>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      {formatTimestamp(item.created_at)}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-wider">
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
+                      {formatSegment(item.segment)}
+                    </span>
+                    {item.city && (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
+                        {item.city}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                      {item.sent_count}/{item.recipient_count} sent
+                    </span>
+                    {item.failed_count > 0 && (
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-700">
+                        {item.failed_count} failed
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Live Preview */}
@@ -251,3 +353,17 @@ export default function AdminBroadcast() {
 }
 
 const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
+
+const formatSegment = (value: string) => {
+  if (value === 'influencers') return 'Creators';
+  if (value === 'brands') return 'Brands';
+  return 'All Users';
+};
+
+const formatTimestamp = (value: string) =>
+  new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });

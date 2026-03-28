@@ -11,8 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import StarField from "@/components/ui/StarField";
 import { useEffect } from "react";
-import { GoogleAuth } from "@codetrix-studio/capacitor-google-auth";
 import { isNativeApp } from "@/lib/platform";
+import { signInWithNativeGoogle } from "@/lib/nativeGoogleAuth";
 
 declare global {
   interface Window {
@@ -94,7 +94,7 @@ const Auth = () => {
     if (isNativeApp()) {
       setLoading(true);
       try {
-        const result = await GoogleAuth.signIn();
+        const result = await signInWithNativeGoogle();
         if (result.authentication.idToken) {
           const { error } = await supabase.auth.signInWithIdToken({
             provider: 'google',
@@ -109,7 +109,7 @@ const Auth = () => {
       } catch (error: any) {
         toast({ 
           title: "Google sign-in failed", 
-          description: error.message || "Native sign-in failed.", 
+          description: error.message || "Native Google sign-in is not available in this build.", 
           variant: "destructive" 
         });
       } finally {

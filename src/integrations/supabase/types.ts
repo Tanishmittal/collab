@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_broadcasts: {
+        Row: {
+          body: string
+          city: string | null
+          created_at: string
+          created_by: string
+          failed_count: number
+          id: string
+          metadata: Json
+          recipient_count: number
+          segment: string
+          sent_count: number
+          title: string
+        }
+        Insert: {
+          body: string
+          city?: string | null
+          created_at?: string
+          created_by: string
+          failed_count?: number
+          id?: string
+          metadata?: Json
+          recipient_count?: number
+          segment: string
+          sent_count?: number
+          title: string
+        }
+        Update: {
+          body?: string
+          city?: string | null
+          created_at?: string
+          created_by?: string
+          failed_count?: number
+          id?: string
+          metadata?: Json
+          recipient_count?: number
+          segment?: string
+          sent_count?: number
+          title?: string
+        }
+        Relationships: []
+      }
       bookings: {
         Row: {
           application_id: string | null
