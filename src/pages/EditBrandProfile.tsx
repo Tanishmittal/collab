@@ -16,6 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useManagedOptions } from "@/hooks/useManagedOptions";
 import { goBackOr } from "@/lib/navigation";
+import { LocationPicker } from "@/components/LocationPicker";
+import { LocationMultiPicker } from "@/components/LocationMultiPicker";
 
 type BrandProfileRow = Database["public"]["Tables"]["brand_profiles"]["Row"];
 type BrandProfileUpdate = Database["public"]["Tables"]["brand_profiles"]["Update"];
@@ -242,10 +244,11 @@ const EditBrandProfile = () => {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="City *">
-                <Select value={city} onValueChange={setCity}>
-                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                  <SelectContent>{cities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
-                </Select>
+                <LocationPicker
+                  value={city}
+                  onChange={setCity}
+                  className="mt-1.5 w-full justify-between rounded-md h-10 px-3 bg-background border-input"
+                />
               </Field>
               <Field label="Tagline">
                 <Input value={brandTagline} onChange={(e) => setBrandTagline(e.target.value)} className="mt-1.5" maxLength={120} />
@@ -264,7 +267,24 @@ const EditBrandProfile = () => {
           </CardHeader>
           <CardContent className="space-y-5">
             <TagPicker label="Target Niches" options={niches} values={targetNiches} onToggle={(value) => toggleArrayItem("targetNiches", value)} />
-            <TagPicker label="Target Cities" options={cities} values={targetCities} onToggle={(value) => toggleArrayItem("targetCities", value)} />
+            <div>
+              <Label>Target Cities</Label>
+              <LocationMultiPicker
+                values={targetCities}
+                onChange={(value) => toggleArrayItem("targetCities", value)}
+                className="w-full h-10 mt-1.5"
+              />
+              {targetCities.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {targetCities.map((c) => (
+                    <span key={c} className="flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      {c}
+                      <button onClick={() => toggleArrayItem("targetCities", c)} className="ml-2 text-slate-400 hover:text-slate-600">&times;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
             <TagPicker label="Deliverable Preferences" options={DELIVERABLE_OPTIONS} values={deliverablePreferences} onToggle={(value) => toggleArrayItem("deliverablePreferences", value)} />
             <TagPicker label="Campaign Goals" options={CAMPAIGN_GOALS} values={campaignGoals} onToggle={(value) => toggleArrayItem("campaignGoals", value)} />
 

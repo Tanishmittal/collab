@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useManagedOptions } from "@/hooks/useManagedOptions";
+import { LocationPicker } from "@/components/LocationPicker";
 
 interface SearchFiltersProps {
   searchQuery: string;
@@ -65,15 +66,12 @@ const SearchFilters = ({
             Campaigns
           </button>
         </div>
-        <Select value={selectedCity} onValueChange={onCityChange}>
-          <SelectTrigger className="w-[132px] lg:w-[160px] h-12 bg-gray-50 border-gray-200 text-gray-900 rounded-xl shrink-0">
-            <SelectValue placeholder="All Cities" />
-          </SelectTrigger>
-          <SelectContent className="bg-white border-gray-200 text-gray-900">
-            <SelectItem value="all">All Cities</SelectItem>
-            {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <LocationPicker
+          value={selectedCity}
+          onChange={onCityChange}
+          showAllOption={true}
+          className="w-[132px] lg:w-[160px] h-12 bg-gray-50 border-gray-200 text-gray-900 shrink-0"
+        />
 
         <Select value={selectedNiche} onValueChange={onNicheChange}>
           <SelectTrigger className="w-[132px] lg:w-[160px] h-12 bg-gray-50 border-gray-200 text-gray-900 rounded-xl shrink-0">
@@ -207,15 +205,12 @@ const SearchFilters = ({
             className="md:hidden overflow-hidden"
           >
             <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2">
-              <Select value={selectedCity} onValueChange={onCityChange}>
-                <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 text-gray-900 rounded-xl">
-                  <SelectValue placeholder="All Cities" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-gray-200 text-gray-900">
-                  <SelectItem value="all">All Cities</SelectItem>
-                  {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <LocationPicker
+                value={selectedCity}
+                onChange={onCityChange}
+                showAllOption={true}
+                className="w-full h-12 bg-gray-50 border-gray-200 text-gray-900"
+              />
               <Select value={selectedNiche} onValueChange={onNicheChange}>
                 <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 text-gray-900 rounded-xl">
                   <SelectValue placeholder="All Niches" />

@@ -29,6 +29,8 @@ import {
 import { useManagedOptions } from "@/hooks/useManagedOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import AvatarUpload from "@/components/AvatarUpload";
+import { LocationPicker } from "@/components/LocationPicker";
+import { LocationMultiPicker } from "@/components/LocationMultiPicker";
 
 const STEPS = [
   { icon: Building2, label: "Identity" },
@@ -180,14 +182,12 @@ const BrandRegistrationForm = ({
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Field label="Base City *">
-                <Select value={form.city} onValueChange={(value) => update("city", value)}>
-                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50">
-                    <SelectValue placeholder="Select your primary city" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cities.map((city) => <SelectItem key={city} value={city}>{city}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <LocationPicker
+                  value={form.city}
+                  onChange={(value) => update("city", value)}
+                  placeholder="Select your primary city"
+                  className="h-12 w-full justify-between rounded-2xl bg-slate-50 font-medium border-slate-200 shadow-none border"
+                />
               </Field>
               <Field label="Brand Tagline">
                 <Input value={form.brandTagline} onChange={(e) => update("brandTagline", e.target.value)} placeholder="Short one-line positioning" className="h-12 rounded-2xl bg-slate-50 font-medium" />
@@ -216,12 +216,24 @@ const BrandRegistrationForm = ({
               onToggle={(value) => toggleArrayItem("targetNiches", value)}
             />
 
-            <TagPicker
-              label="Priority Cities *"
-              options={cities}
-              values={form.targetCities}
-              onToggle={(value) => toggleArrayItem("targetCities", value)}
-            />
+            <div className="space-y-3">
+              <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Priority Cities *</Label>
+              <LocationMultiPicker
+                values={form.targetCities}
+                onChange={(value) => toggleArrayItem("targetCities", value)}
+                className="w-full h-12 bg-slate-50 border-slate-200"
+              />
+              {form.targetCities.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {form.targetCities.map((city) => (
+                    <span key={city} className="flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
+                      {city}
+                      <button onClick={() => toggleArrayItem("targetCities", city)} className="ml-2 text-slate-400 hover:text-slate-600">&times;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <TagPicker
               label="Preferred Deliverables *"

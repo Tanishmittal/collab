@@ -28,6 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useManagedOptions } from "@/hooks/useManagedOptions";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { LocationPicker } from "@/components/LocationPicker";
 import type { InfluencerFormData } from "@/hooks/useInfluencerRegistration";
 
 type StepSetter = Dispatch<SetStateAction<number>>;
@@ -302,18 +303,12 @@ const InfluencerRegistrationForm = ({
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Base City</Label>
-                  <Select value={form.city} onValueChange={(value) => update("city", value)}>
-                    <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50/60">
-                      <SelectValue placeholder="Where are you based?" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cities.map((city) => (
-                        <SelectItem key={city} value={city}>
-                          {city}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <LocationPicker
+                    value={form.city}
+                    onChange={(value) => update("city", value)}
+                    placeholder="Where are you based?"
+                    className="h-12 w-full justify-between rounded-2xl border-slate-200 bg-slate-50/60 font-medium shadow-none"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Primary Niche</Label>

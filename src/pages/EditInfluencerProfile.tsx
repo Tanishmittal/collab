@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useManagedOptions } from "@/hooks/useManagedOptions";
 import type { Database } from "@/integrations/supabase/types";
 import { goBackOr } from "@/lib/navigation";
+import { LocationPicker } from "@/components/LocationPicker";
 
 type PortfolioItemRow = Database["public"]["Tables"]["portfolio_items"]["Row"];
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"] & {
@@ -343,10 +344,11 @@ const EditInfluencerProfile = () => {
             </div>
             <div>
               <Label>City *</Label>
-              <Select value={city} onValueChange={setCity}>
-                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>{cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
+              <LocationPicker
+                value={city}
+                onChange={setCity}
+                className="mt-1.5 w-full justify-between rounded-md h-10 px-3 bg-background border-input"
+              />
             </div>
             <div>
               <Label>Bio</Label>

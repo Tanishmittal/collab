@@ -8,6 +8,7 @@ type NicheRow = Database["public"]["Tables"]["niches"]["Row"];
 
 export const useManagedOptions = () => {
   const [cities, setCities] = useState<string[]>(FALLBACK_CITIES);
+  const [citiesByState, setCitiesByState] = useState<Record<string, string[]>>({ "Other": FALLBACK_CITIES });
   const [niches, setNiches] = useState<string[]>(FALLBACK_NICHES);
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +24,17 @@ export const useManagedOptions = () => {
       if (!active) return;
 
       if (!cityError && cityRows && cityRows.length > 0) {
-        setCities((cityRows as CityRow[]).map((city) => city.name));
+        const typedRows = cityRows as CityRow[];
+        setCities(typedRows.map((city) => city.name));
+        
+        const grouped = typedRows.reduce((acc, city) => {
+          const stateName = city.state || "Other";
+          if (!acc[stateName]) acc[stateName] = [];
+          acc[stateName].push(city.name);
+          return acc;
+        }, {} as Record<string, string[]>);
+        
+        setCitiesByState(grouped);
       }
 
       if (!nicheError && nicheRows && nicheRows.length > 0) {
@@ -43,9 +54,10 @@ export const useManagedOptions = () => {
   return useMemo(
     () => ({
       cities,
+      citiesByState,
       niches,
       loading,
     }),
-    [cities, niches, loading]
+    [cities, citiesByState, niches, loading]
   );
 };

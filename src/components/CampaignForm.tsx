@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { CampaignFormData, CampaignActivitySummary } from "@/hooks/useCampaignForm";
 import { useManagedOptions } from "@/hooks/useManagedOptions";
+import { LocationPicker } from "@/components/LocationPicker";
 
 const nicheColors: Record<string, string> = {
   Food: "text-orange-600 border-orange-200 bg-orange-50",
@@ -216,18 +217,11 @@ const CampaignForm = ({
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Primary City *</Label>
-            <Select value={form.city} onValueChange={(value) => update("city", value)}>
-              <SelectTrigger disabled={targetingLocked} className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-5 font-bold shadow-none">
-                <SelectValue placeholder="Select city" />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl border-slate-200">
-                {cities.map((city) => (
-                  <SelectItem key={city} value={city} className="font-bold">
-                    {city}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LocationPicker
+              value={form.city}
+              onChange={(value) => update("city", value)}
+              className={`h-12 w-full justify-between rounded-2xl border-slate-200 bg-slate-50 px-5 font-bold shadow-none ${targetingLocked ? 'opacity-50 pointer-events-none' : ''}`}
+            />
           </div>
           <div className="space-y-2">
             <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Core Niche *</Label>
@@ -401,18 +395,12 @@ const CampaignForm = ({
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Primary City *</Label>
-            <Select value={form.city} onValueChange={(value) => update("city", value)}>
-              <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-5 font-bold shadow-none">
-                <SelectValue placeholder="Select location" />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl border-slate-200">
-                {cities.map((city) => (
-                  <SelectItem key={city} value={city} className="font-bold">
-                    {city}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LocationPicker
+              value={form.city}
+              onChange={(value) => update("city", value)}
+              placeholder="Select location"
+              className="h-12 w-full justify-between rounded-2xl border-slate-200 bg-slate-50 px-5 font-bold shadow-none"
+            />
           </div>
           <div className="space-y-2">
             <Label className="ml-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Core Niche *</Label>
