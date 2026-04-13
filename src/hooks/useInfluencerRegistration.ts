@@ -11,7 +11,7 @@ export interface InfluencerFormData {
   bio: string;
   niche: string;
   followers: string;
-  engagementRate: string;
+
   platforms: string[];
   priceReel: string;
   priceStory: string;
@@ -47,7 +47,7 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
     bio: "",
     niche: "",
     followers: "",
-    engagementRate: "",
+
     platforms: [],
     priceReel: "",
     priceStory: "",
@@ -108,7 +108,7 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
       bio: form.bio,
       niche: form.niche,
       followers: form.followers || "0",
-      engagement_rate: form.engagementRate || "0",
+
       platforms: form.platforms,
       price_reel: Number.parseInt(form.priceReel, 10) || 0,
       price_story: Number.parseInt(form.priceStory, 10) || 0,

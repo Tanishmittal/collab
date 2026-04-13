@@ -206,8 +206,7 @@ const Index = () => {
       switch (sortBy) {
         case "followers":
           return parseFollowers(b.followers) - parseFollowers(a.followers);
-        case "engagement":
-          return b.engagementRate - a.engagementRate;
+
         case "price-low":
           return a.priceReel - b.priceReel;
         case "price-high":

@@ -475,16 +475,7 @@ const InfluencerView = ({
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
-                            {platform.engagement && (
-                              <div className="flex flex-col items-end leading-none">
-                                <span className="text-xs font-bold text-slate-800">
-                                  {platform.engagement.toFixed(1)}%
-                                </span>
-                                <span className="text-[7px] mt-0.5 font-bold text-slate-400 uppercase tracking-tighter">
-                                  Engagement
-                                </span>
-                              </div>
-                            )}
+
                             <div className="flex flex-col items-end leading-none">
                               <span className="text-sm font-black text-slate-900">
                                 {formatFollowerCount(platform.followers)}

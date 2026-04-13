@@ -95,7 +95,7 @@ const EditInfluencerProfile = () => {
   const [bio, setBio] = useState("");
   const [niche, setNiche] = useState("");
   const [followers, setFollowers] = useState("");
-  const [engagementRate, setEngagementRate] = useState("");
+
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [priceReel, setPriceReel] = useState("");
   const [priceStory, setPriceStory] = useState("");
@@ -150,7 +150,7 @@ const EditInfluencerProfile = () => {
       setBio(profile.bio || "");
       setNiche(profile.niche);
       setFollowers(profile.followers);
-      setEngagementRate(profile.engagement_rate || "");
+
       const initialVerifiedPlatforms = [
         profile.instagram_url ? "Instagram" : null,
         profile.youtube_url ? "YouTube" : null,
@@ -236,7 +236,7 @@ const EditInfluencerProfile = () => {
         bio: bio.trim().slice(0, 300),
         niche,
         followers: followers.trim(),
-        engagement_rate: engagementRate,
+
         platforms: verifiedPlatforms,
         price_reel: parseInt(priceReel) || 0,
         price_story: parseInt(priceStory) || 0,
@@ -506,11 +506,11 @@ const EditInfluencerProfile = () => {
             onUnverified={() => {
               setIsVerified(false);
               setFollowers("");
-              setEngagementRate("");
+
             }}
             onStatsFetched={(stats) => {
               if (stats.totalFollowers) setFollowers(stats.totalFollowers);
-              if (stats.engagementRate) setEngagementRate(stats.engagementRate);
+
 
               if (stats.platform === "instagram" && stats.followers !== undefined) setIgFollowers(stats.followers);
               if (stats.platform === "youtube" && stats.followers !== undefined) setYtSubscribers(stats.followers);

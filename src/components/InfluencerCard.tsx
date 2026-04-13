@@ -135,11 +135,6 @@ const InfluencerCard = ({
             </div>
             <div className="h-8 w-[1px] self-center bg-white/15" />
             <div className="min-w-0">
-              <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-gray-400 sm:text-[10px]">Engage</p>
-              <p className="text-sm font-bold text-white sm:text-base">{influencer.engagementRate}%</p>
-            </div>
-            <div className="h-8 w-[1px] self-center bg-white/15" />
-            <div className="min-w-0">
               <p className="mb-0.5 text-[8px] font-bold tracking-wider text-gray-400 sm:text-[10px]">Price</p>
               <p className="text-sm font-black text-white sm:text-base">{influencer.priceReel.toLocaleString()}</p>
             </div>

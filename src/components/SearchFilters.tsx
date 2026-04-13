@@ -89,7 +89,7 @@ const SearchFilters = ({
           </SelectTrigger>
           <SelectContent className="bg-white border-gray-200 text-gray-900">
             <SelectItem value="followers">Most Followers</SelectItem>
-            <SelectItem value="engagement">Highest Engagement</SelectItem>
+
             <SelectItem value="price-low">Price: Low to High</SelectItem>
             <SelectItem value="price-high">Price: High to Low</SelectItem>
             <SelectItem value="rating">Top Rated</SelectItem>
@@ -226,7 +226,7 @@ const SearchFilters = ({
                 </SelectTrigger>
                 <SelectContent className="bg-white border-gray-200 text-gray-900">
                   <SelectItem value="followers">Most Followers</SelectItem>
-                  <SelectItem value="engagement">Highest Engagement</SelectItem>
+
                   <SelectItem value="price-low">Price: Low to High</SelectItem>
                   <SelectItem value="price-high">Price: High to Low</SelectItem>
                   <SelectItem value="rating">Top Rated</SelectItem>

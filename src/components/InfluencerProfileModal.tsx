@@ -73,11 +73,7 @@ export default function InfluencerProfileModal({ profile, children }: Influencer
               <div className="font-semibold">{profile.rating || "N/A"}</div>
               <div className="text-[10px] text-muted-foreground uppercase">Rating</div>
             </div>
-            <div className="bg-muted/50 p-3 rounded-lg">
-              <div className="text-base font-bold mb-1 text-muted-foreground">%</div>
-              <div className="font-semibold">{profile.engagement_rate || "N/A"}</div>
-              <div className="text-[10px] text-muted-foreground uppercase">Engagement</div>
-            </div>
+
           </div>
 
           {profile.bio && (

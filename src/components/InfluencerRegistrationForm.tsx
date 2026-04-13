@@ -205,7 +205,7 @@ const InfluencerRegistrationForm = ({
           platformId === "instagram" ? "Instagram" : platformId === "youtube" ? "YouTube" : "Twitter";
         update("platforms", Array.from(new Set([...form.platforms, verifiedLabel])));
         if (data.stats?.followers) update("followers", data.stats.followers);
-        if (data.stats?.engagement_rate) update("engagementRate", String(data.stats.engagement_rate));
+
         toast({ title: "Verified", description: `${config.label} account verified successfully.` });
       } else {
         toast({
@@ -540,10 +540,7 @@ const InfluencerRegistrationForm = ({
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Followers</p>
                       <p className="mt-2 text-xl font-semibold text-slate-950">{form.followers || "0"}</p>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Engagement</p>
-                      <p className="mt-2 text-xl font-semibold text-slate-950">{form.engagementRate || "0"}%</p>
-                    </div>
+
                     <div className="rounded-2xl bg-slate-50 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Verified</p>
                       <p className="mt-2 text-xl font-semibold text-slate-950">{form.platforms.length}</p>
