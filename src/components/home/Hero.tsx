@@ -196,18 +196,7 @@ const Hero = () => {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-4 w-full sm:w-auto mt-2 sm:mt-0">
-                  <div className="flex -space-x-3 shrink-0">
-                    {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#050505] bg-gray-800 overflow-hidden relative z-10 transition-transform hover:z-20 hover:scale-110">
-                        <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="user" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                      </div>
-                    ))}
-                  </div>
-                  <span className="text-[11px] md:text-sm font-semibold text-teal-400 whitespace-nowrap">
-                    +2.4k active creators
-                  </span>
-                </div>
+
               </div>
             </div>
 
@@ -243,17 +232,7 @@ const Hero = () => {
                         </div>
                         <h3 className="text-2xl md:text-3xl font-black mb-1 text-white">{inf.name}</h3>
 
-                        <div className="flex gap-4 md:gap-6 mt-4 md:mt-6">
-                          <div>
-                            <p className="text-[9px] md:text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-0.5 md:mb-1">Followers</p>
-                            <p className="text-lg md:text-xl font-bold text-white">{inf.reach}</p>
-                          </div>
-                          <div className="h-8 md:h-10 w-[1px] bg-white/10" />
-                          <div>
-                            <p className="text-[9px] md:text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-0.5 md:mb-1">Engagement</p>
-                            <p className="text-lg md:text-xl font-bold text-white">{inf.engagement}</p>
-                          </div>
-                        </div>
+
 
                         <button className="mt-6 md:mt-8 w-full py-2.5 md:py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl font-bold text-[11px] md:text-sm hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 text-white">
                           View Deep Insights <ExternalLink size={14} />

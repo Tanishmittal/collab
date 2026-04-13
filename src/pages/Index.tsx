@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import type { Campaign, Influencer } from "@/data/mockData";
+import { influencers as mockInfluencers } from "@/data/mockData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampaigns, useInfluencers } from "@/hooks/useQuery";
 import Hero from "@/components/home/Hero";
@@ -15,7 +16,7 @@ const DiscoverySection = lazy(() => import("@/components/home/DiscoverySection")
 const FeaturesSection = lazy(() => import("@/components/home/FeaturesSection"));
 const GuestInfluencerCarousel = lazy(() => import("@/components/home/GuestInfluencerCarousel"));
 const HowItWorksSection = lazy(() => import("@/components/home/HowItWorksSection"));
-const StatsSection = lazy(() => import("@/components/home/StatsSection"));
+
 const TestimonialsSection = lazy(() => import("@/components/home/TestimonialsSection"));
 const Footer = lazy(() => import("@/components/home/Footer"));
 
@@ -104,10 +105,9 @@ const Index = () => {
   }, {
     enabled: !!user,
   });
-
   const influencers = useMemo(
-    () =>
-      (influencersData as InfluencerProfileRow[]).map(
+    () => {
+      const realInfluencers = (influencersData as InfluencerProfileRow[]).map(
         (row) =>
           ({
             id: row.id,
@@ -127,8 +127,18 @@ const Index = () => {
             bio: row.bio || "",
             isVerified: row.is_verified || false,
           }) as Influencer
-      ),
-    [influencersData]
+      );
+
+      // If user is guest, supplement with mock data to fill the carousel
+      if (isGuest) {
+        const existingNames = new Set(realInfluencers.map(i => i.name.toLowerCase()));
+        const uniqueMock = mockInfluencers.filter(m => !existingNames.has(m.name.toLowerCase()));
+        return [...realInfluencers, ...uniqueMock].slice(0, 8);
+      }
+
+      return realInfluencers;
+    },
+    [influencersData, isGuest]
   );
 
   const campaigns = useMemo(
@@ -394,11 +404,7 @@ const Index = () => {
               <HowItWorksSection />
             </Suspense>
           </DeferredSection>
-          <DeferredSection fallbackClassName="min-h-[280px]">
-            <Suspense fallback={<SectionSkeleton className="min-h-[280px]" />}>
-              <StatsSection />
-            </Suspense>
-          </DeferredSection>
+
           <DeferredSection fallbackClassName="min-h-[420px]">
             <Suspense fallback={<SectionSkeleton className="min-h-[420px]" />}>
               <TestimonialsSection />
