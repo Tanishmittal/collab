@@ -18,9 +18,7 @@ import {
   Link as LinkIcon,
   Check,
   X,
-  Mail,
-  Clock,
-  History
+  Mail
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,7 +44,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 
-type UserType = 'influencer' | 'brand' | 'history';
+type UserType = 'influencer' | 'brand';
 
 export default function AdminUsers() {
   const [activeTab, setActiveTab] = useState<UserType>('influencer');
@@ -67,9 +65,7 @@ export default function AdminUsers() {
     setLoading(true);
     setUsers([]); // Clear previous data to prevent property mismatched rendering
     try {
-      const table = activeTab === 'influencer' ? 'influencer_profiles' : 
-                    activeTab === 'brand' ? 'brand_profiles' : 
-                    'notification_logs';
+      const table = activeTab === 'influencer' ? 'influencer_profiles' : 'brand_profiles';
       
       const { data, error } = await supabase
         .from(table)
@@ -106,7 +102,7 @@ export default function AdminUsers() {
       if (error) throw error;
 
       // 4. Send Email Notifications (only for hide action)
-      if (!currentStatus && reason) {
+      if (currentStatus && reason) {
         for (const id of ids) {
           const userToNotify = users.find(u => u.id === id);
           if (userToNotify?.user_id) {
@@ -212,12 +208,6 @@ export default function AdminUsers() {
   };
 
   const filteredUsers = users.filter(item => {
-    if (activeTab === 'history') {
-      return (item.recipient_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-             (item.notification_type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-             (item.status || '').toLowerCase().includes(searchTerm.toLowerCase());
-    }
-    
     return (item.name || item.business_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
            (item.city || item.location || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
            (item.niche || item.industry || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -247,16 +237,6 @@ export default function AdminUsers() {
           >
             <Building2 className="h-4 w-4" />
             Brands
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={cn(
-              "flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all",
-              activeTab === 'history' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-            )}
-          >
-            <Clock className="h-4 w-4" />
-            History
           </button>
         </div>
 
@@ -369,50 +349,6 @@ export default function AdminUsers() {
       ) : filteredUsers.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-100 italic text-slate-400">
           No {activeTab}s found matching your criteria.
-        </div>
-      ) : activeTab === 'history' ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-bottom border-slate-200">
-                  <th className="p-4 font-semibold text-slate-600">Date</th>
-                  <th className="p-4 font-semibold text-slate-600">Recipient</th>
-                  <th className="p-4 font-semibold text-slate-600">Type</th>
-                  <th className="p-4 font-semibold text-slate-600">Status</th>
-                  <th className="p-4 font-semibold text-slate-600">Error/Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredUsers.map((log: any) => (
-                  <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 text-slate-500 whitespace-nowrap">
-                      {new Date(log.created_at).toLocaleString()}
-                    </td>
-                    <td className="p-4 font-medium text-slate-800">
-                      {log.recipient_email}
-                    </td>
-                    <td className="p-4">
-                      <Badge variant="outline" className="capitalize text-[10px]">
-                        {(log.notification_type || 'unknown').replace('_', ' ')}
-                      </Badge>
-                    </td>
-                    <td className="p-4">
-                      <Badge 
-                        variant={log.status === 'success' ? 'default' : 'destructive'}
-                        className={cn("text-[10px]", log.status === 'success' ? "bg-emerald-500" : "")}
-                      >
-                        {log.status === 'success' ? 'Sent' : 'Failed'}
-                      </Badge>
-                    </td>
-                    <td className="p-4 text-xs text-slate-400 max-w-xs truncate">
-                      {log.error_message || "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

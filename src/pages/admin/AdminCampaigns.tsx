@@ -78,7 +78,7 @@ export default function AdminCampaigns() {
       if (error) throw error;
 
       // 4. Send Email Notifications (only for hide action)
-      if (!currentStatus && reason) {
+      if (currentStatus && reason) {
         // Group by brand owner to send "One Email" per brand
         const brandGroups = ids.reduce((acc, id) => {
           const campaign = campaigns.find(cam => cam.id === id);

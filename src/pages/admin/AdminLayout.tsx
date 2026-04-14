@@ -9,7 +9,8 @@ import {
   LogOut,
   ChevronRight,
   Menu,
-  ArrowLeft
+  ArrowLeft,
+  History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ const navItems = [
   { id: 'users', label: 'User Moderation', icon: Users, path: '/admin/users' },
   { id: 'campaigns', label: 'Campaigns', icon: FileText, path: '/admin/campaigns' },
   { id: 'broadcast', label: 'Global Broadcast', icon: Megaphone, path: '/admin/broadcast' },
+  { id: 'history', label: 'Notification Logs', icon: History, path: '/admin/history' },
 ];
 
 export const AdminLayout = () => {

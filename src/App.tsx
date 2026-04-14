@@ -37,6 +37,7 @@ const AdminOverview = lazy(() => import("./pages/admin/AdminOverview").then(m =>
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const AdminCampaigns = lazy(() => import("./pages/admin/AdminCampaigns"));
 const AdminBroadcast = lazy(() => import("./pages/admin/AdminBroadcast"));
+const AdminHistory = lazy(() => import("./pages/admin/AdminHistory"));
 import { AdminGuard } from "./components/admin/AdminGuard";
 import MobileNav from "@/components/MobileNav";
 import { usePushNotifications } from "./hooks/usePushNotifications";
@@ -117,6 +118,7 @@ const AppRoutes = () => {
               <Route path="users" element={<AdminUsers />} />
               <Route path="campaigns" element={<AdminCampaigns />} />
               <Route path="broadcast" element={<AdminBroadcast />} />
+              <Route path="history" element={<AdminHistory />} />
             </Route>
           </Route>
         )}
