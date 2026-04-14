@@ -1,9 +1,12 @@
 import { ReactNode } from "react";
 import Sidebar from "./Sidebar";
-import { Bell } from "lucide-react";
+import { Bell, AlertCircle, Info, X } from "lucide-react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
+import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect } from "react";
+import { Button } from "./ui/button";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -14,6 +17,47 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const { user, influencerId, brandId } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
+  const [moderationInfo, setModerationInfo] = useState<{ is_active: boolean; message: string | null } | null>(null);
+  const [hiddenCampaigns, setHiddenCampaigns] = useState<number>(0);
+  const [showBanner, setShowBanner] = useState(true);
+
+  useEffect(() => {
+    const checkModeration = async () => {
+      if (!user) return;
+
+      // 1. Check Profile Moderation
+      const table = influencerId ? 'influencer_profiles' : (brandId ? 'brand_profiles' : null);
+      if (table) {
+        const { data, error } = await supabase
+          .from(table)
+          .select('is_active, moderation_message')
+          .eq('id', influencerId || brandId)
+          .single();
+        
+        if (!error && data) {
+          setModerationInfo({
+            is_active: data.is_active ?? true,
+            message: data.moderation_message
+          });
+        }
+      }
+
+      // 2. Check Campaign Moderation (for Brands)
+      if (brandId) {
+        const { count, error } = await supabase
+          .from('campaigns')
+          .select('*', { count: 'exact', head: true })
+          .eq('brand_id', brandId)
+          .eq('is_active', false);
+        
+        if (!error) {
+          setHiddenCampaigns(count || 0);
+        }
+      }
+    };
+
+    checkModeration();
+  }, [user, influencerId, brandId]);
 
   // Helper to get title from path
   const getPageTitle = (path: string) => {
@@ -79,6 +123,54 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
         {/* Dynamic Page Content */}
         <div className="flex-1 min-h-0 w-full overflow-y-auto">
+          {/* Moderation Warnings */}
+          {showBanner && (
+            <div className="px-8 pt-6 space-y-3">
+              {moderationInfo && !moderationInfo.is_active && (
+                <div className="flex flex-col md:flex-row md:items-center gap-4 p-5 bg-red-50 border border-red-100 rounded-2xl shadow-sm text-red-900">
+                  <div className="h-12 w-12 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                    <AlertCircle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-sm">Your profile is currently hidden from the public</h4>
+                    <p className="text-xs text-red-700/80 mt-1 leading-relaxed">
+                      {moderationInfo.message || "An admin has hidden your profile. Please check your settings or contact support to resolve any issues."}
+                    </p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="md:w-auto w-full bg-white border-red-200 text-red-700 hover:bg-red-100 hover:text-red-800 font-bold"
+                    onClick={() => navigate("/settings")}
+                  >
+                    Resolve Issues
+                  </Button>
+                </div>
+              )}
+
+              {hiddenCampaigns > 0 && (
+                <div className="flex flex-col md:flex-row md:items-center gap-4 p-5 bg-amber-50 border border-amber-100 rounded-2xl shadow-sm text-amber-900 font-normal">
+                  <div className="h-12 w-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                    <Info className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-sm">{hiddenCampaigns} of your campaigns are hidden</h4>
+                    <p className="text-xs text-amber-700/80 mt-1 leading-relaxed">
+                      Admin moderation has hidden some of your campaigns. They will not be visible to creators until the issues are addressed.
+                    </p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="md:w-auto w-full bg-white border-amber-200 text-amber-700 hover:bg-amber-100 hover:text-amber-800 font-bold"
+                    onClick={() => navigate("/brand/campaigns")}
+                  >
+                    Review Campaigns
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           {children}
         </div>
       </main>

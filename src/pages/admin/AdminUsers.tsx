@@ -15,11 +15,25 @@ import {
   Instagram,
   Youtube,
   Twitter,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Check,
+  X,
+  Mail,
+  Clock,
+  History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Sheet, 
   SheetContent, 
@@ -32,7 +46,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 
-type UserType = 'influencer' | 'brand';
+type UserType = 'influencer' | 'brand' | 'history';
 
 export default function AdminUsers() {
   const [activeTab, setActiveTab] = useState<UserType>('influencer');
@@ -43,12 +57,20 @@ export default function AdminUsers() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isReasonDialogOpen, setIsReasonDialogOpen] = useState(false);
+  const [moderationReason, setModerationReason] = useState('');
+  const [pendingBulkAction, setPendingBulkAction] = useState<'hide' | 'unhide' | null>(null);
   const { toast } = useToast();
 
   const fetchUsers = async () => {
     setLoading(true);
+    setUsers([]); // Clear previous data to prevent property mismatched rendering
     try {
-      const table = activeTab === 'influencer' ? 'influencer_profiles' : 'brand_profiles';
+      const table = activeTab === 'influencer' ? 'influencer_profiles' : 
+                    activeTab === 'brand' ? 'brand_profiles' : 
+                    'notification_logs';
+      
       const { data, error } = await supabase
         .from(table)
         .select('*')
@@ -67,22 +89,44 @@ export default function AdminUsers() {
     fetchUsers();
   }, [activeTab]);
 
-  const toggleStatus = async (userId: string, currentStatus: boolean) => {
-    setProcessingId(userId);
+  const toggleStatus = async (userId: string | string[], currentStatus: boolean, reason?: string) => {
+    const ids = Array.isArray(userId) ? userId : [userId];
+    setProcessingId(ids.length === 1 ? ids[0] : 'bulk');
+    
     try {
       const table = activeTab === 'influencer' ? 'influencer_profiles' : 'brand_profiles';
       const { error } = await supabase
         .from(table)
-        .update({ is_active: !currentStatus })
-        .eq('id', userId);
+        .update({ 
+          is_active: !currentStatus,
+          moderation_message: !currentStatus ? reason || null : null // Clear reason if unhiding
+        })
+        .in('id', ids);
 
       if (error) throw error;
 
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_active: !currentStatus } : u));
+      // 4. Send Email Notifications (only for hide action)
+      if (!currentStatus && reason) {
+        for (const id of ids) {
+          const userToNotify = users.find(u => u.id === id);
+          if (userToNotify?.user_id) {
+            supabase.functions.invoke('notify-user-email', {
+              body: {
+                user_id: userToNotify.user_id,
+                type: 'profile_hidden',
+                reason: reason
+              }
+            }).catch(e => console.error('Failed to send email:', e));
+          }
+        }
+      }
+
+      setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, is_active: !currentStatus, moderation_message: !currentStatus ? reason || null : null } : u));
+      setSelectedIds([]); // Clear selection after action
       
       toast({
-        title: `Profile ${!currentStatus ? 'Activated' : 'Hidden'}`,
-        description: `The ${activeTab} profile visibility has been updated successfully.`,
+        title: `${ids.length > 1 ? ids.length + ' Profiles' : 'Profile'} ${!currentStatus ? 'Hidden' : 'Activated'}`,
+        description: `Visibility has been updated successfully.`,
         variant: !currentStatus ? 'default' : 'destructive',
       });
     } catch (err) {
@@ -94,6 +138,33 @@ export default function AdminUsers() {
       });
     } finally {
       setProcessingId(null);
+      setIsReasonDialogOpen(false);
+      setModerationReason('');
+    }
+  };
+
+  const handleBulkAction = (action: 'hide' | 'unhide') => {
+    if (selectedIds.length === 0) return;
+    
+    if (action === 'hide') {
+      setPendingBulkAction('hide');
+      setIsReasonDialogOpen(true);
+    } else {
+      toggleStatus(selectedIds, true); // Unhide doesn't need reason
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredUsers.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredUsers.map(u => u.id));
     }
   };
 
@@ -140,10 +211,17 @@ export default function AdminUsers() {
     setEditForm((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  const filteredUsers = users.filter(user => 
-    (user.name || user.business_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.city || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users.filter(item => {
+    if (activeTab === 'history') {
+      return (item.recipient_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+             (item.notification_type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+             (item.status || '').toLowerCase().includes(searchTerm.toLowerCase());
+    }
+    
+    return (item.name || item.business_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+           (item.city || item.location || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+           (item.niche || item.industry || '').toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <div className="space-y-6">
@@ -170,18 +248,118 @@ export default function AdminUsers() {
             <Building2 className="h-4 w-4" />
             Brands
           </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={cn(
+              "flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+              activeTab === 'history' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            )}
+          >
+            <Clock className="h-4 w-4" />
+            History
+          </button>
         </div>
 
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder={`Search ${activeTab}s...`}
-            className="pl-10 h-10 border-slate-200"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+            <Checkbox 
+              id="select-all" 
+              checked={selectedIds.length > 0 && selectedIds.length === filteredUsers.length}
+              onCheckedChange={toggleSelectAll}
+            />
+            <Label htmlFor="select-all" className="text-xs font-semibold text-slate-500 cursor-pointer">
+              {selectedIds.length > 0 ? `${selectedIds.length} Selected` : 'Select All'}
+            </Label>
+          </div>
+
+          <div className="relative flex-1 md:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder={`Search by name, city, or niche...`}
+              className="pl-10 h-10 border-slate-200"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
       </div>
+
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in fade-in slide-in-from-bottom-4 duration-300 border border-slate-800">
+          <div className="flex flex-col">
+            <span className="text-sm font-bold">{selectedIds.length} users selected</span>
+            <span className="text-[10px] text-slate-400">Apply action to all</span>
+          </div>
+          <div className="h-8 w-px bg-slate-700" />
+          <div className="flex items-center gap-2">
+            <Button 
+              size="sm" 
+              variant="destructive" 
+              className="gap-2 bg-red-600 hover:bg-red-700 h-9"
+              onClick={() => handleBulkAction('hide')}
+            >
+              <EyeOff className="h-4 w-4" />
+              Hide All
+            </Button>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="gap-2 border-slate-700 bg-transparent hover:bg-slate-800 h-9 text-white"
+              onClick={() => handleBulkAction('unhide')}
+            >
+              <Check className="h-4 w-4" />
+              Unhide All
+            </Button>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="text-slate-400 hover:text-white h-9"
+              onClick={() => setSelectedIds([])}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Moderation Reason Dialog */}
+      <Dialog open={isReasonDialogOpen} onOpenChange={setIsReasonDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reason for Hiding</DialogTitle>
+            <DialogDescription>
+              Provide a reason for hiding {pendingBulkAction ? `${selectedIds.length} profiles` : 'this profile'}. This message will be shown privately on their dashboard and sent via email.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="reason" className="mb-2 block font-semibold text-slate-700">Moderation Message</Label>
+            <Textarea 
+              id="reason"
+              placeholder="e.g. Profile is missing a biography or professional photos. Please update to be unhidden."
+              value={moderationReason}
+              onChange={(e) => setModerationReason(e.target.value)}
+              className="min-h-[120px] border-slate-200 focus:ring-blue-500"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setIsReasonDialogOpen(false)}>Cancel</Button>
+            <Button 
+              className="bg-red-600 hover:bg-red-700" 
+              onClick={() => {
+                if (pendingBulkAction) {
+                  toggleStatus(selectedIds, false, moderationReason);
+                } else {
+                  toggleStatus(processingId as string, true, moderationReason); // true here means current is active, so we hide
+                }
+              }}
+              disabled={!moderationReason.trim() || (processingId === 'bulk')}
+            >
+              {processingId === 'bulk' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm & Hide'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Grid */}
       {loading ? (
@@ -192,18 +370,75 @@ export default function AdminUsers() {
         <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-100 italic text-slate-400">
           No {activeTab}s found matching your criteria.
         </div>
+      ) : activeTab === 'history' ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-bottom border-slate-200">
+                  <th className="p-4 font-semibold text-slate-600">Date</th>
+                  <th className="p-4 font-semibold text-slate-600">Recipient</th>
+                  <th className="p-4 font-semibold text-slate-600">Type</th>
+                  <th className="p-4 font-semibold text-slate-600">Status</th>
+                  <th className="p-4 font-semibold text-slate-600">Error/Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredUsers.map((log: any) => (
+                  <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 text-slate-500 whitespace-nowrap">
+                      {new Date(log.created_at).toLocaleString()}
+                    </td>
+                    <td className="p-4 font-medium text-slate-800">
+                      {log.recipient_email}
+                    </td>
+                    <td className="p-4">
+                      <Badge variant="outline" className="capitalize text-[10px]">
+                        {(log.notification_type || 'unknown').replace('_', ' ')}
+                      </Badge>
+                    </td>
+                    <td className="p-4">
+                      <Badge 
+                        variant={log.status === 'success' ? 'default' : 'destructive'}
+                        className={cn("text-[10px]", log.status === 'success' ? "bg-emerald-500" : "")}
+                      >
+                        {log.status === 'success' ? 'Sent' : 'Failed'}
+                      </Badge>
+                    </td>
+                    <td className="p-4 text-xs text-slate-400 max-w-xs truncate">
+                      {log.error_message || "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredUsers.map((user) => (
              <div 
               key={user.id} 
               className={cn(
-                "bg-white p-5 rounded-2xl border transition-all duration-300 flex items-center justify-between cursor-pointer hover:border-blue-200 hover:shadow-md group",
-                user.is_active ? "border-slate-200 shadow-sm" : "border-red-100 bg-red-50/30 opacity-80"
+                "bg-white p-5 rounded-2xl border transition-all duration-300 flex items-center justify-between cursor-pointer hover:border-blue-200 hover:shadow-md group relative",
+                user.is_active ? "border-slate-200 shadow-sm" : "border-red-100 bg-red-50/30 opacity-80",
+                selectedIds.includes(user.id) ? "border-blue-500 ring-1 ring-blue-500 bg-blue-50/10" : ""
               )}
               onClick={() => handleEdit(user)}
             >
-              <div className="flex items-center gap-4 flex-1">
+              {/* Checkbox Overlay */}
+              <div 
+                className="absolute top-4 left-4 z-10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Checkbox 
+                  checked={selectedIds.includes(user.id)}
+                  onCheckedChange={() => toggleSelect(user.id)}
+                  className="h-5 w-5 border-slate-300 bg-white"
+                />
+              </div>
+
+              <div className="flex items-center gap-4 flex-1 pl-8">
                 <div className="h-14 w-14 rounded-full bg-slate-100 border border-slate-200 overflow-hidden relative">
                   {user.avatar_url ? (
                     <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
@@ -230,6 +465,15 @@ export default function AdminUsers() {
                     </div>
                     <span>•</span>
                     <span className="capitalize">{user.niche || 'General'}</span>
+                    {user.email && (
+                      <>
+                        <span>•</span>
+                        <div className="flex items-center gap-1 truncate max-w-[150px]">
+                          <Mail className="h-3 w-3" />
+                          <span className="truncate">{user.email}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -244,7 +488,13 @@ export default function AdminUsers() {
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleStatus(user.id, user.is_active);
+                    if (user.is_active) {
+                      setPendingBulkAction(null);
+                      setProcessingId(user.id);
+                      setIsReasonDialogOpen(true);
+                    } else {
+                      toggleStatus(user.id, user.is_active);
+                    }
                   }}
                   disabled={processingId === user.id}
                 >
@@ -281,6 +531,7 @@ export default function AdminUsers() {
           ))}
         </div>
       )}
+
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent className="sm:max-w-xl flex flex-col h-full p-0">
           <div className="flex-1 overflow-y-auto p-6 pb-12">
@@ -303,7 +554,17 @@ export default function AdminUsers() {
                   </div>
                   <div>
                     <h3 className="font-bold text-lg">{editForm.name || editForm.business_name}</h3>
-                    <p className="text-sm text-slate-500">{editForm.city || 'No city set'}</p>
+                    {editForm.email && (
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <p>{editForm.city || 'No city set'}</p>
+                        <span>•</span>
+                        <div className="flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          <p>{editForm.email}</p>
+                        </div>
+                      </div>
+                    )}
+                    {!editForm.email && <p className="text-sm text-slate-500">{editForm.city || 'No city set'}</p>}
                     {!editForm.avatar_url && !editForm.logo_url && (
                       <Badge variant="destructive" className="mt-1">Missing Avatar</Badge>
                     )}
