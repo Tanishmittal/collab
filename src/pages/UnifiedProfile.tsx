@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatFollowers } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import ReviewList from "@/components/ReviewList";
 import type { Database } from "@/integrations/supabase/types";
@@ -60,18 +61,7 @@ const emptyReviewSummary: ReviewSummary = {
   distribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: 0, pct: 0 })),
 };
 
-const formatFollowerCount = (value: string | number | null | undefined) => {
-  if (value == null) return "0";
-  const raw = typeof value === "number" ? value.toString() : value.trim();
-  if (!raw) return "0";
-  if (/[kKmM]$/.test(raw)) return raw.toUpperCase();
 
-  const numeric = Number(raw.replace(/,/g, ""));
-  if (Number.isNaN(numeric)) return raw;
-  if (numeric >= 1_000_000) return `${(numeric / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (numeric >= 1_000) return `${(numeric / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-  return numeric.toString();
-};
 
 const createReviewSummary = (reviews: ReviewRow[]): ReviewSummary => {
   if (reviews.length === 0) return emptyReviewSummary;
@@ -478,7 +468,7 @@ const InfluencerView = ({
 
                             <div className="flex flex-col items-end leading-none">
                               <span className="text-sm font-black text-slate-900">
-                                {formatFollowerCount(platform.followers)}
+                                {formatFollowers(platform.followers)}
                               </span>
                               <span className="text-[8px] mt-0.5 font-bold text-teal-600 uppercase tracking-tight">
                                 Reach

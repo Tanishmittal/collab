@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Users, Star, Video, Image as ImageIcon, Store } from "lucide-react";
+import { formatFollowers } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
@@ -65,7 +66,7 @@ export default function InfluencerProfileModal({ profile, children }: Influencer
           <div className="grid grid-cols-3 gap-4 w-full mt-4 text-center">
             <div className="bg-muted/50 p-3 rounded-lg">
               <Users size={16} className="mx-auto mb-1 text-muted-foreground" />
-              <div className="font-semibold">{profile.followers || "N/A"}</div>
+              <div className="font-semibold">{formatFollowers(profile.followers)}</div>
               <div className="text-[10px] text-muted-foreground uppercase">Followers</div>
             </div>
             <div className="bg-muted/50 p-3 rounded-lg">

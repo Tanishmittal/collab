@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { MapPin, Star, Instagram, Youtube, Twitter, ShieldCheck, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { formatFollowers } from "@/lib/utils";
 import type { Influencer } from "@/data/mockData";
 
 const platformIcon = (p: string) => {
@@ -22,13 +23,7 @@ const nicheColors: Record<string, string> = {
   Comedy: "from-yellow-400 to-amber-400",
 };
 
-const formatFollowers = (count: string | number) => {
-  const num = typeof count === "string" ? parseInt(count.replace(/,/g, ""), 10) : count;
-  if (isNaN(num)) return count;
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (num >= 1_000) return `${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1).replace(/\.0$/, "")}K`;
-  return num.toString();
-};
+
 
 const InfluencerCard = ({
   influencer,
