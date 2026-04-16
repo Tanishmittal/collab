@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { parseFollowerCount } from "@/lib/campaignEligibility";
 
 export interface InfluencerFormData {
   name: string;
@@ -107,7 +108,8 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
       city: form.city,
       bio: form.bio,
       niche: form.niche,
-      followers: form.followers || "0",
+      total_followers_count: parseFollowerCount(form.followers),
+      total_verified_followers_count: 0,
 
       platforms: form.platforms,
       price_reel: Number.parseInt(form.priceReel, 10) || 0,

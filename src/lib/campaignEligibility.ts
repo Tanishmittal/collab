@@ -12,7 +12,8 @@ type CampaignEligibilityCampaign = {
 type CampaignEligibilityInfluencer = {
   city: string;
   niche: string;
-  followers: string;
+  total_followers_count?: number | null;
+  total_verified_followers_count?: number | null;
   engagement_rate?: string | null;
   platforms?: string[] | null;
   is_verified?: boolean | null;
@@ -90,9 +91,14 @@ export const getCampaignEligibility = (
     }
   }
 
-  const followerCount = parseFollowerCount(influencer.followers);
-  if (campaign.min_followers && followerCount < campaign.min_followers) {
-    reasons.push(`Needs ${campaign.min_followers.toLocaleString()}+ followers.`);
+  const useVerifiedOnly = campaign.verified_socials_only ?? false;
+  const influencerFollowers = useVerifiedOnly 
+    ? (influencer.total_verified_followers_count || 0)
+    : (influencer.total_followers_count || 0);
+
+  if (campaign.min_followers && influencerFollowers < campaign.min_followers) {
+    const label = useVerifiedOnly ? "verified followers" : "followers";
+    reasons.push(`Needs ${campaign.min_followers.toLocaleString()}+ ${label}.`);
   }
 
   const engagementRate = parseEngagementRate(influencer.engagement_rate);

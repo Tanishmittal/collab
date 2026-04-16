@@ -126,7 +126,7 @@ const InfluencerCard = ({
           <div className="mb-4 flex items-center gap-6">
             <div className="min-w-0">
               <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-gray-400 sm:text-[10px]">Followers</p>
-              <p className="text-sm font-bold text-white sm:text-base">{formatFollowers(influencer.followers)}</p>
+              <p className="text-sm font-bold text-white sm:text-base">{formatFollowers(influencer.totalFollowers)}</p>
             </div>
             <div className="h-8 w-[1px] self-center bg-white/15" />
             <div className="min-w-0">

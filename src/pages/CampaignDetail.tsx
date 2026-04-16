@@ -994,7 +994,9 @@ const CampaignDetail = () => {
                                 </Link>
                                 <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                                   {profile?.city && <span className="flex items-center gap-0.5"><MapPin size={10} /> {profile.city}</span>}
-                                  {profile?.followers && <span>• {profile.followers} followers</span>}
+                                  {profile?.total_followers_count !== undefined && profile?.total_followers_count !== null && (
+                                    <span>• {formatFollowers(profile.total_followers_count)} followers</span>
+                                  )}
                                   {profile?.rating && <span className="flex items-center gap-1"><Star size={10} className="fill-current" /> {profile.rating}</span>}
                                 </div>
                               </div>

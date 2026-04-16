@@ -37,12 +37,14 @@ type ReviewRow = Database["public"]["Tables"]["reviews"]["Row"];
 type BookingRow = Database["public"]["Tables"]["bookings"]["Row"];
 type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"] & {
-  ig_followers?: string | number | null;
-  yt_subscribers?: string | number | null;
-  twitter_followers?: string | number | null;
+  ig_followers?: number | null;
+  yt_subscribers?: number | null;
+  twitter_followers?: number | null;
   ig_engagement?: number | null;
   yt_engagement?: number | null;
   twitter_engagement?: number | null;
+  total_followers_count?: number | null;
+  total_verified_followers_count?: number | null;
 };
 type BrandProfileRow = Database["public"]["Tables"]["brand_profiles"]["Row"];
 type PortfolioItemRow = Database["public"]["Tables"]["portfolio_items"]["Row"];
@@ -364,21 +366,21 @@ const InfluencerView = ({
       label: "Instagram", 
       href: influencer.instagram_url, 
       icon: <Instagram size={18} className="text-pink-500" />,
-      followers: influencer.ig_followers ?? "0",
+      followers: Number(influencer.ig_followers) || 0,
       engagement: influencer.ig_engagement
     } : null,
     influencer.youtube_url ? { 
       label: "YouTube", 
       href: influencer.youtube_url, 
       icon: <Youtube size={18} className="text-red-500" />,
-      followers: influencer.yt_subscribers ?? "0",
+      followers: Number(influencer.yt_subscribers) || 0,
       engagement: influencer.yt_engagement
     } : null,
     influencer.twitter_url ? { 
       label: "X (Twitter)", 
       href: influencer.twitter_url, 
       icon: <Twitter size={18} className="text-sky-500" />,
-      followers: influencer.twitter_followers ?? "0",
+      followers: Number(influencer.twitter_followers) || 0,
       engagement: influencer.twitter_engagement
     } : null,
   ].filter(Boolean) as Array<{ label: string; href: string; icon: JSX.Element; followers: any; engagement: number | null }>;
@@ -423,17 +425,37 @@ const InfluencerView = ({
                           {influencer.niche}
                         </Badge>
                       </div>
+                      </div>
+                      
+                      {/* Metric Summary Bar */}
+                      <div className="mt-8 flex items-center justify-around border-y border-slate-100 py-6">
+                        <div className="flex flex-col items-center">
+                          <span className="text-2xl font-black text-slate-900 leading-none tracking-tight">
+                            {formatFollowers(Number(influencer.total_followers_count) || 0)}
+                          </span>
+                          <span className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Reach</span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-100" />
+                        <div className="flex flex-col items-center">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-2xl font-black text-teal-600 leading-none tracking-tight">
+                              {formatFollowers(Number(influencer.total_verified_followers_count) || 0)}
+                            </span>
+                            <ShieldCheck size={16} className="text-teal-500 fill-teal-50" />
+                          </div>
+                          <span className="mt-2 text-[10px] font-bold uppercase tracking-widest text-teal-600/60">Verified Reach</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-
-                  {/* Bio Section */}
-                  {influencer.bio && (
-                    <p className="text-sm leading-7 text-slate-600 italic">
-                      "{influencer.bio}"
-                    </p>
-
-                  )}
+                    <div className="px-1">
+                      {/* Bio Section */}
+                      {influencer.bio && (
+                        <p className="text-sm leading-7 text-slate-600 italic">
+                          "{influencer.bio}"
+                        </p>
+                      )}
+                    </div>
 
                   {/* Verified Socials List (The "Column" Section) */}
                   <div className="space-y-3">

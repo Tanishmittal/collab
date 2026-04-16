@@ -575,15 +575,26 @@ export default function AdminUsers() {
               {/* Stats & Socials - Influencer Specific */}
               {activeTab === 'influencer' && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Follower Count (Display)</Label>
+                      <Label>Total Follower Count (Manual + Verified)</Label>
                       <Input 
-                        value={editForm.followers || ''} 
-                        onChange={(e) => updateFormField('followers', e.target.value)}
-                        placeholder="e.g. 10.5K"
+                        type="number"
+                        value={editForm.total_followers_count || 0} 
+                        onChange={(e) => updateFormField('total_followers_count', Number(e.target.value))}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label>Verified Follower Count (System Only)</Label>
+                      <Input 
+                        type="number"
+                        value={editForm.total_verified_followers_count || 0} 
+                        onChange={(e) => updateFormField('total_verified_followers_count', Number(e.target.value))}
+                        className="bg-slate-50"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="mx-auto"></div>
                     <div className="space-y-2">
                       <Label>Engagement Rate (%)</Label>
                       <Input 

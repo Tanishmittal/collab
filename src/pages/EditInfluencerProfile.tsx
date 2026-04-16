@@ -94,7 +94,6 @@ const EditInfluencerProfile = () => {
   const [city, setCity] = useState("");
   const [bio, setBio] = useState("");
   const [niche, setNiche] = useState("");
-  const [followers, setFollowers] = useState("");
 
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [priceReel, setPriceReel] = useState("");
@@ -107,6 +106,9 @@ const EditInfluencerProfile = () => {
   const [igFollowers, setIgFollowers] = useState("");
   const [ytSubscribers, setYtSubscribers] = useState("");
   const [twitterFollowers, setTwitterFollowers] = useState("");
+  const [igLastVerified, setIgLastVerified] = useState<string | null>(null);
+  const [ytLastVerified, setYtLastVerified] = useState<string | null>(null);
+  const [twitterLastVerified, setTwitterLastVerified] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
   const [isVerified, setIsVerified] = useState(false);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioDraft[]>([]);
@@ -139,9 +141,12 @@ const EditInfluencerProfile = () => {
         youtube_url?: string | null;
         twitter_url?: string | null;
         verification_code?: string | null;
-        ig_followers?: string | null;
-        yt_subscribers?: string | null;
-        twitter_followers?: string | null;
+        ig_followers?: number | null;
+        yt_subscribers?: number | null;
+        twitter_followers?: number | null;
+        ig_last_verified?: string | null;
+        yt_last_verified?: string | null;
+        twitter_last_verified?: string | null;
       };
 
       setProfileId(profile.id);
@@ -149,13 +154,13 @@ const EditInfluencerProfile = () => {
       setCity(profile.city);
       setBio(profile.bio || "");
       setNiche(profile.niche);
-      setFollowers(profile.followers);
 
       const initialVerifiedPlatforms = [
-        profile.instagram_url ? "Instagram" : null,
-        profile.youtube_url ? "YouTube" : null,
-        profile.twitter_url ? "Twitter" : null,
+        profile.ig_last_verified ? "Instagram" : null,
+        profile.yt_last_verified ? "YouTube" : null,
+        profile.twitter_last_verified ? "Twitter" : null,
       ].filter(Boolean) as string[];
+
       setPlatforms(initialVerifiedPlatforms);
       setPriceReel(String(profile.price_reel));
       setPriceStory(String(profile.price_story));
@@ -164,9 +169,12 @@ const EditInfluencerProfile = () => {
       setInstagramUrl(profile.instagram_url || "");
       setYoutubeUrl(profile.youtube_url || "");
       setTwitterUrl(profile.twitter_url || "");
-      setIgFollowers(profile.ig_followers ?? "");
-      setYtSubscribers(profile.yt_subscribers ?? "");
-      setTwitterFollowers(profile.twitter_followers ?? "");
+      setIgFollowers(profile.ig_followers ? String(profile.ig_followers) : "");
+      setYtSubscribers(profile.yt_subscribers ? String(profile.yt_subscribers) : "");
+      setTwitterFollowers(profile.twitter_followers ? String(profile.twitter_followers) : "");
+      setIgLastVerified(profile.ig_last_verified || null);
+      setYtLastVerified(profile.yt_last_verified || null);
+      setTwitterLastVerified(profile.twitter_last_verified || null);
       setVerificationCode(profile.verification_code || "");
       setIsVerified(initialVerifiedPlatforms.length > 0);
 
@@ -220,12 +228,25 @@ const EditInfluencerProfile = () => {
   const handleSave = async () => {
     if (!user || !profileId) return;
 
-    if (!name.trim() || !city || !niche || !followers.trim() || !priceReel || !priceStory || !priceVisit) {
+    if (!name.trim() || !city || !niche || !priceReel || !priceStory || !priceVisit) {
       toast({ title: "Missing fields", description: "Please fill in all required fields.", variant: "destructive" });
       return;
     }
 
     const verifiedPlatforms = platforms;
+    
+    // Parse numeric inputs
+    const igCount = parseInt(igFollowers) || 0;
+    const ytCount = parseInt(ytSubscribers) || 0;
+    const twCount = parseInt(twitterFollowers) || 0;
+    
+    // Calculate totals
+    const totalCount = igCount + ytCount + twCount;
+    const verifiedCount = (
+      (igLastVerified ? igCount : 0) +
+      (ytLastVerified ? ytCount : 0) +
+      (twitterLastVerified ? twCount : 0)
+    );
 
     setSaving(true);
     const { error } = await supabase
@@ -235,16 +256,22 @@ const EditInfluencerProfile = () => {
         city,
         bio: bio.trim().slice(0, 300),
         niche,
-        followers: followers.trim(),
-
+        total_followers_count: totalCount,
+        total_verified_followers_count: verifiedCount,
+        ig_followers: igCount,
+        yt_subscribers: ytCount,
+        twitter_followers: twCount,
+        ig_last_verified: igLastVerified,
+        yt_last_verified: ytLastVerified,
+        twitter_last_verified: twitterLastVerified,
         platforms: verifiedPlatforms,
         price_reel: parseInt(priceReel) || 0,
         price_story: parseInt(priceStory) || 0,
         price_visit: parseInt(priceVisit) || 0,
         is_verified: verifiedPlatforms.length > 0,
-        instagram_url: verifiedPlatforms.includes("Instagram") ? instagramUrl.trim() || null : null,
-        youtube_url: verifiedPlatforms.includes("YouTube") ? youtubeUrl.trim() || null : null,
-        twitter_url: verifiedPlatforms.includes("Twitter") ? twitterUrl.trim() || null : null,
+        instagram_url: instagramUrl.trim() || null,
+        youtube_url: youtubeUrl.trim() || null,
+        twitter_url: twitterUrl.trim() || null,
         avatar_url: avatarUrl,
       })
       .eq("id", profileId);
@@ -495,26 +522,43 @@ const EditInfluencerProfile = () => {
             onInstagramChange={setInstagramUrl}
             onYoutubeChange={setYoutubeUrl}
             onTwitterChange={setTwitterUrl}
-            totalFollowers={followers}
-            platformStats={{
-              instagram: igFollowers,
-              youtube: ytSubscribers,
-              twitter: twitterFollowers
-            }}
+            igFollowers={igFollowers}
+            ytSubscribers={ytSubscribers}
+            twitterFollowers={twitterFollowers}
+            onIgFollowersChange={setIgFollowers}
+            onYtSubscribersChange={setYtSubscribers}
+            onTwitterFollowersChange={setTwitterFollowers}
             onVerified={() => setIsVerified(true)}
             onVerifiedPlatformsChange={setPlatforms}
-            onUnverified={() => {
-              setIsVerified(false);
-              setFollowers("");
-
+            onUnverified={(platformId) => {
+              // Clear verification for specific platform
+              if (platformId === "instagram") {
+                setIgLastVerified(null);
+                setPlatforms(p => p.filter(x => x !== "Instagram"));
+              } else if (platformId === "youtube") {
+                setYtLastVerified(null);
+                setPlatforms(p => p.filter(x => x !== "YouTube"));
+              } else if (platformId === "twitter") {
+                setTwitterLastVerified(null);
+                setPlatforms(p => p.filter(x => x !== "Twitter"));
+              }
             }}
             onStatsFetched={(stats) => {
-              if (stats.totalFollowers) setFollowers(stats.totalFollowers);
-
-
-              if (stats.platform === "instagram" && stats.followers !== undefined) setIgFollowers(stats.followers);
-              if (stats.platform === "youtube" && stats.followers !== undefined) setYtSubscribers(stats.followers);
-              if (stats.platform === "twitter" && stats.followers !== undefined) setTwitterFollowers(stats.followers);
+              if (stats.platform === "instagram") {
+                if (stats.followers) setIgFollowers(String(stats.followers));
+                setIgLastVerified(new Date().toISOString());
+                if (!platforms.includes("Instagram")) setPlatforms(p => [...p, "Instagram"]);
+              }
+              if (stats.platform === "youtube") {
+                if (stats.followers) setYtSubscribers(String(stats.followers));
+                setYtLastVerified(new Date().toISOString());
+                if (!platforms.includes("YouTube")) setPlatforms(p => [...p, "YouTube"]);
+              }
+              if (stats.platform === "twitter") {
+                if (stats.followers) setTwitterFollowers(String(stats.followers));
+                setTwitterLastVerified(new Date().toISOString());
+                if (!platforms.includes("Twitter")) setPlatforms(p => [...p, "Twitter"]);
+              }
             }}
           />
         </div>

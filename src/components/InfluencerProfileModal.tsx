@@ -8,7 +8,7 @@ import type { Database } from "@/integrations/supabase/types";
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
 type InfluencerProfilePreview = Pick<
   InfluencerProfileRow,
-  "name" | "city" | "niche" | "followers" | "engagement_rate" | "rating"
+  "name" | "city" | "niche" | "total_followers_count" | "engagement_rate" | "rating"
 > &
   Partial<
     Pick<
@@ -66,7 +66,7 @@ export default function InfluencerProfileModal({ profile, children }: Influencer
           <div className="grid grid-cols-3 gap-4 w-full mt-4 text-center">
             <div className="bg-muted/50 p-3 rounded-lg">
               <Users size={16} className="mx-auto mb-1 text-muted-foreground" />
-              <div className="font-semibold">{formatFollowers(profile.followers)}</div>
+              <div className="font-semibold">{formatFollowers(profile.total_followers_count || 0)}</div>
               <div className="text-[10px] text-muted-foreground uppercase">Followers</div>
             </div>
             <div className="bg-muted/50 p-3 rounded-lg">

@@ -286,31 +286,39 @@ Deno.serve(async (req) => {
         const fullUrl = constructUrl(platform, socialUrl);
         console.log(`[Apify] Updating ${platform} stats: followers=${followersCount}, engagement=${engagementRate}`);
 
-        // 1. Fetch current profile to calculate TOTAL reach across all platforms
+        // 1. Fetch current profile to calculate TOTAL and VERIFIED reach
         const { data: currentProfile } = await supabaseAdmin
           .from("influencer_profiles")
-          .select("ig_followers, yt_subscribers, twitter_followers")
+          .select("ig_followers, yt_subscribers, twitter_followers, ig_last_verified, yt_last_verified, twitter_last_verified")
           .eq("user_id", user.id)
           .maybeSingle();
 
-        // Use the new count for the current platform, robustly parse existing ones
-        const igCount = platform === "instagram" ? followersCount : parseFormattedFollowers(currentProfile?.ig_followers);
-        const ytCount = platform === "youtube" ? followersCount : parseFormattedFollowers(currentProfile?.yt_subscribers);
-        const twCount = platform === "twitter" ? followersCount : parseFormattedFollowers(currentProfile?.twitter_followers);
-        
-        const totalReach = igCount + ytCount + twCount;
-        const formattedTotal = formatFollowers(totalReach);
+        const timestampCol = platform === "instagram" ? "ig_last_verified" : platform === "youtube" ? "yt_last_verified" : "twitter_last_verified";
+        const now = new Date().toISOString();
 
-        // 2. Update Profile (Specific platform columns + calculated total reach)
+        // Calculate Total Followers (All platforms)
+        const igCount = platform === "instagram" ? followersCount : (currentProfile?.ig_followers || 0);
+        const ytCount = platform === "youtube" ? followersCount : (currentProfile?.yt_subscribers || 0);
+        const twCount = platform === "twitter" ? followersCount : (currentProfile?.twitter_followers || 0);
+        const totalReach = Number(igCount) + Number(ytCount) + Number(twCount);
+
+        // Calculate Strictly Verified Followers
+        const igVerified = platform === "instagram" || (currentProfile?.ig_last_verified) ? Number(igCount) : 0;
+        const ytVerified = platform === "youtube" || (currentProfile?.yt_last_verified) ? Number(ytCount) : 0;
+        const twVerified = platform === "twitter" || (currentProfile?.twitter_last_verified) ? Number(twCount) : 0;
+        const verifiedReach = igVerified + ytVerified + twVerified;
+
+        // 2. Update Profile (Numeric columns)
         const { data: profile, error: updateError } = await supabaseAdmin
           .from("influencer_profiles")
           .update({
             [urlColumn]: fullUrl,
             is_verified: true,
-            followers: formattedTotal, // Update the legacy 'Total Reach' column with the calculated sum
+            total_followers_count: totalReach,
+            total_verified_followers_count: verifiedReach,
             [followersCol]: followersCount,
             [engagementCol]: engagementRate > 0 ? parseFloat(engagementRate.toFixed(2)) : null,
-            [verifiedCol]: new Date().toISOString()
+            [verifiedCol]: now
           })
           .eq("user_id", user.id)
           .select("id")
@@ -338,8 +346,9 @@ Deno.serve(async (req) => {
           success: true, 
           verified: true, 
           stats: { 
-            followers: formattedFollowers, // Platform-specific formatted string
-            totalFollowers: formattedTotal, // The new calculated total formatted string
+            followers: formattedFollowers, 
+            totalFollowers: totalReach,
+            verifiedFollowers: verifiedReach,
             engagementRate 
           }, 
           fullUrl 

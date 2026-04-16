@@ -20,13 +20,9 @@ const HowItWorksSection = lazy(() => import("@/components/home/HowItWorksSection
 const TestimonialsSection = lazy(() => import("@/components/home/TestimonialsSection"));
 const Footer = lazy(() => import("@/components/home/Footer"));
 
-type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"];
-type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
-const parseFollowers = (f: string) => {
-  const num = parseFloat(f);
-  if (f.includes("K")) return num * 1000;
-  if (f.includes("M")) return num * 1000000;
-  return num;
+type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"] & {
+  total_followers_count?: number | null;
+  total_verified_followers_count?: number | null;
 };
 
 const SectionSkeleton = ({ className = "min-h-[320px]" }: { className?: string }) => (
@@ -114,7 +110,8 @@ const Index = () => {
             name: row.name,
             city: row.city,
             niche: row.niche,
-            followers: row.followers,
+            totalFollowers: Number(row.total_followers_count) || 0,
+            totalVerifiedFollowers: Number(row.total_verified_followers_count) || 0,
             engagementRate: parseFloat(row.engagement_rate || "4.5"),
             platforms: row.platforms || [],
             priceReel: row.price_reel,
@@ -209,13 +206,16 @@ const Index = () => {
       const matchCity = selectedCity === "all" || influencer.city === selectedCity;
       const matchNiche = selectedNiche === "all" || influencer.niche === selectedNiche;
       const matchVerified = !verifiedOnly || influencer.isVerified;
+      
+      // If verifiedOnly is active, the influencer must have verified followers actually >= some threshold? 
+      // Actually, the filter is just "Is Verified". The count logic is in Sort and Eligibility.
       return matchSearch && matchCity && matchNiche && matchVerified;
     });
 
     result.sort((a, b) => {
       switch (sortBy) {
         case "followers":
-          return parseFollowers(b.followers) - parseFollowers(a.followers);
+          return (verifiedOnly ? b.totalVerifiedFollowers : b.totalFollowers) - (verifiedOnly ? a.totalVerifiedFollowers : a.totalFollowers);
 
         case "price-low":
           return a.priceReel - b.priceReel;
@@ -264,7 +264,8 @@ const Index = () => {
               {
                 city: currentInfluencer.city,
                 niche: currentInfluencer.niche,
-                followers: currentInfluencer.followers,
+                total_followers_count: currentInfluencer.totalFollowers,
+                total_verified_followers_count: currentInfluencer.totalVerifiedFollowers,
                 engagement_rate: String(currentInfluencer.engagementRate),
                 platforms: currentInfluencer.platforms,
                 is_verified: currentInfluencer.isVerified ?? false,
@@ -300,7 +301,8 @@ const Index = () => {
         {
           city: currentInfluencer.city,
           niche: currentInfluencer.niche,
-          followers: currentInfluencer.followers,
+          total_followers_count: currentInfluencer.totalFollowers,
+          total_verified_followers_count: currentInfluencer.totalVerifiedFollowers,
           engagement_rate: String(currentInfluencer.engagementRate),
           platforms: currentInfluencer.platforms,
           is_verified: currentInfluencer.isVerified ?? false,

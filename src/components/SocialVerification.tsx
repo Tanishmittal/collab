@@ -18,12 +18,17 @@ interface SocialVerificationProps {
   onInstagramChange: (v: string) => void;
   onYoutubeChange: (v: string) => void;
   onTwitterChange: (v: string) => void;
+  igFollowers: string;
+  ytSubscribers: string;
+  twitterFollowers: string;
+  onIgFollowersChange: (v: string) => void;
+  onYtSubscribersChange: (v: string) => void;
+  onTwitterFollowersChange: (v: string) => void;
   onVerified: () => void;
   onVerifiedPlatformsChange: (platforms: string[]) => void;
-  onUnverified?: () => void;
-  onStatsFetched?: (stats: { followers?: string; engagementRate?: string; platform?: string; totalFollowers?: string }) => void;
-  totalFollowers?: string;
-  platformStats?: Record<string, string>;
+  onUnverified?: (platformId: string) => void;
+  onStatsFetched?: (stats: { followers?: string; engagementRate?: string; platform?: string; totalFollowers?: number; verifiedFollowers?: number }) => void;
+  totalFollowers?: number;
 }
 
 const PLATFORMS = [
@@ -37,8 +42,7 @@ const toStoredPlatform = (platformId: string) =>
 
 const toPlatformId = (platform: string) =>
   platform === "Instagram" ? "instagram" : platform === "YouTube" ? "youtube" : "twitter";
-
-const SocialVerification = ({
+export const SocialVerification = ({
   verificationCode,
   isVerified,
   verifiedPlatforms,
@@ -48,12 +52,17 @@ const SocialVerification = ({
   onInstagramChange,
   onYoutubeChange,
   onTwitterChange,
+  igFollowers,
+  ytSubscribers,
+  twitterFollowers,
+  onIgFollowersChange,
+  onYtSubscribersChange,
+  onTwitterFollowersChange,
   onVerified,
   onVerifiedPlatformsChange,
   onUnverified,
   onStatsFetched,
   totalFollowers,
-  platformStats,
 }: SocialVerificationProps) => {
   const { toast } = useToast();
   const [verifying, setVerifying] = useState<string | null>(null);
@@ -69,6 +78,8 @@ const SocialVerification = ({
 
   const urls: Record<string, string> = { instagram: instagramUrl, youtube: youtubeUrl, twitter: twitterUrl };
   const setters: Record<string, (v: string) => void> = { instagram: onInstagramChange, youtube: onYoutubeChange, twitter: onTwitterChange };
+  const followerValues: Record<string, string> = { instagram: igFollowers, youtube: ytSubscribers, twitter: twitterFollowers };
+  const followerSetters: Record<string, (v: string) => void> = { instagram: onIgFollowersChange, youtube: onYtSubscribersChange, twitter: onTwitterFollowersChange };
 
   const syncVerifiedPlatforms = (platformSet: Set<string>) => {
     const nextPlatforms = Array.from(platformSet).map(toStoredPlatform);
@@ -218,14 +229,29 @@ const SocialVerification = ({
                   </div>
                 )}
               </Label>
-              <div className="flex gap-2">
-                <Input
-                  value={urls[platform.id]}
-                  onChange={(e) => setters[platform.id](e.target.value)}
-                  placeholder={platform.placeholder}
-                  className="flex-1"
-                  disabled={isPlatformVerified}
-                />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex-1">
+                  <Input
+                    value={urls[platform.id]}
+                    onChange={(e) => setters[platform.id](e.target.value)}
+                    placeholder={platform.placeholder}
+                    className="w-full"
+                    disabled={isPlatformVerified}
+                  />
+                </div>
+                <div className="w-full sm:w-32 relative">
+                  <Input
+                    type="number"
+                    value={followerValues[platform.id]}
+                    onChange={(e) => followerSetters[platform.id](e.target.value)}
+                    placeholder="Count"
+                    className="w-full pr-8"
+                    disabled={isPlatformVerified}
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground/50 pointer-events-none">
+                    FL
+                  </div>
+                </div>
                 {isPlatformVerified ? (
                   <div className="flex gap-2">
                     <Button
