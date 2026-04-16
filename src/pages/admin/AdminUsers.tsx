@@ -575,6 +575,7 @@ export default function AdminUsers() {
               {/* Stats & Socials - Influencer Specific */}
               {activeTab === 'influencer' && (
                 <>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Total Follower Count (Manual + Verified)</Label>
                       <Input 
@@ -593,6 +594,7 @@ export default function AdminUsers() {
                       />
                     </div>
                   </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="mx-auto"></div>
                     <div className="space-y-2">
