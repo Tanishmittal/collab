@@ -221,9 +221,9 @@ export const SocialVerification = ({
                     <Badge className="border-success/30 bg-success/20 px-1.5 py-0 text-[10px] text-success">
                       <CheckCircle size={10} className="mr-0.5" /> Verified
                     </Badge>
-                    {(platformStats?.[platform.id] !== undefined && platformStats?.[platform.id] !== null && platformStats[platform.id] !== "") && (
+                    {(followerValues[platform.id] !== undefined && followerValues[platform.id] !== null && followerValues[platform.id] !== "") && (
                       <span className="text-[10px] font-medium text-muted-foreground">
-                        ({platformStats[platform.id]})
+                        ({followerValues[platform.id]})
                       </span>
                     )}
                   </div>
@@ -300,4 +300,3 @@ export const SocialVerification = ({
   );
 };
 
-export default SocialVerification;

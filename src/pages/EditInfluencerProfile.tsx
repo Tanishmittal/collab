@@ -4,7 +4,7 @@ import { Save, Loader2, ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import AvatarUpload from "@/components/AvatarUpload";
 import PortfolioMediaUpload from "@/components/PortfolioMediaUpload";
-import SocialVerification from "@/components/SocialVerification";
+import { SocialVerification } from "@/components/SocialVerification";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
