@@ -20,6 +20,7 @@ import {
   Briefcase,
   Users,
   UserCircle2,
+  ExternalLink,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import BookingModal from "@/components/BookingModal";
@@ -27,16 +28,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatFollowers } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import ReviewList from "@/components/ReviewList";
 import type { Database } from "@/integrations/supabase/types";
 
+// --- Database Type Definitions ---
 type ReviewRow = Database["public"]["Tables"]["reviews"]["Row"];
 type BookingRow = Database["public"]["Tables"]["bookings"]["Row"];
 type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"] & {
+  // Extended fields for social stats stored in the database
   ig_followers?: number | null;
   yt_subscribers?: number | null;
   twitter_followers?: number | null;
@@ -65,6 +74,11 @@ const emptyReviewSummary: ReviewSummary = {
 
 
 
+// --- Utility Functions ---
+
+/**
+ * Summarizes an array of reviews into metrics like average rating and star distribution.
+ */
 const createReviewSummary = (reviews: ReviewRow[]): ReviewSummary => {
   if (reviews.length === 0) return emptyReviewSummary;
 
@@ -81,6 +95,9 @@ const createReviewSummary = (reviews: ReviewRow[]): ReviewSummary => {
   return { average, count: reviews.length, distribution };
 };
 
+/**
+ * Returns the corresponding Lucide icon for a social media platform.
+ */
 const platformIcon = (platform: string, size = 16) => {
   if (platform === "Instagram") return <Instagram size={size} />;
   if (platform === "YouTube") return <Youtube size={size} />;
@@ -115,27 +132,38 @@ const isGeneratedPortfolioTitle = (item: PortfolioItemRow) => {
   );
 };
 
+/**
+ * UnifiedProfile is the main parent component that handles data fetching 
+ * for both Influencer and Brand profiles. 
+ * It dynamically switches between views based on the URL and user data.
+ */
 const UnifiedProfile = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
+  // --- State Hooks ---
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>("influencer");
+  const [activeTab, setActiveTab] = useState<string>("influencer"); // Current view mode: "influencer" or "brand"
   const [influencer, setInfluencer] = useState<InfluencerProfileRow | null>(null);
   const [brand, setBrand] = useState<BrandProfileRow | null>(null);
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
-  const [isOwner, setIsOwner] = useState(false);
+  const [isOwner, setIsOwner] = useState(false); // Whether the current logged-in user owns this profile
   const [reviewSummary, setReviewSummary] = useState<ReviewSummary>(emptyReviewSummary);
   const [collaborations, setCollaborations] = useState<CollaborationItem[]>([]);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItemRow[]>([]);
 
+  // Navigation and routing helpers
   const isInfluencerRoute = location.pathname.includes("/influencer/");
   const isBrandRoute = location.pathname.includes("/brand/");
   const requestedTab = searchParams.get("tab");
   const profileBackTo = `${location.pathname}${location.search}`;
 
+  /**
+   * Main data fetching orchestration. 
+   * Fetches profile details, reviews, campaigns, and portfolio items in parallel.
+   */
   useEffect(() => {
     const fetchData = async () => {
       if (!id || id === "undefined") {
@@ -217,6 +245,7 @@ const UnifiedProfile = () => {
         }
 
         if (infRes.data) {
+          // Fetch secondary data for the influencer: reviews, bookings, and portfolio
           const [reviewsRes, bookingsRes, portfolioRes] = await Promise.all([
             supabase.from("reviews").select("*").eq("reviewee_id", infRes.data.user_id).order("created_at", { ascending: false }),
             supabase
@@ -239,6 +268,7 @@ const UnifiedProfile = () => {
           setReviewSummary(createReviewSummary(reviewRows));
           setPortfolioItems(portfolioRows);
 
+          // Find all unique campaign IDs from reviews and bookings to build the collaboration history
           const campaignIds = Array.from(
             new Set(
               [
@@ -342,6 +372,10 @@ const UnifiedProfile = () => {
   );
 };
 
+/**
+ * InfluencerView renders the profile page for a creator.
+ * It includes their stats, verified socials, rate card, and tabs for portfolio/reviews.
+ */
 const InfluencerView = ({
   influencer,
   isOwner,
@@ -360,30 +394,36 @@ const InfluencerView = ({
   const navigate = useNavigate();
   const { user, brandId } = useAuth();
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<PortfolioItemRow | null>(null);
   const initials = influencer.name.split(" ").map((n: string) => n[0]).join("").toUpperCase();
-  const verifiedSocials = [
-    influencer.instagram_url ? { 
+
+  // Prepare social media platform presence for display (including self-reported stats)
+  const platformPresence = [
+    { 
       label: "Instagram", 
       href: influencer.instagram_url, 
       icon: <Instagram size={18} className="text-pink-500" />,
       followers: Number(influencer.ig_followers) || 0,
-      engagement: influencer.ig_engagement
-    } : null,
-    influencer.youtube_url ? { 
+      engagement: influencer.ig_engagement,
+      isVerified: influencer.is_verified && influencer.ig_followers > 0 && influencer.total_verified_followers_count > 0
+    },
+    { 
       label: "YouTube", 
       href: influencer.youtube_url, 
       icon: <Youtube size={18} className="text-red-500" />,
       followers: Number(influencer.yt_subscribers) || 0,
-      engagement: influencer.yt_engagement
-    } : null,
-    influencer.twitter_url ? { 
+      engagement: influencer.yt_engagement,
+      isVerified: influencer.is_verified && influencer.yt_subscribers > 0 && influencer.total_verified_followers_count > 0
+    },
+    { 
       label: "X (Twitter)", 
       href: influencer.twitter_url, 
       icon: <Twitter size={18} className="text-sky-500" />,
       followers: Number(influencer.twitter_followers) || 0,
-      engagement: influencer.twitter_engagement
-    } : null,
-  ].filter(Boolean) as Array<{ label: string; href: string; icon: JSX.Element; followers: any; engagement: number | null }>;
+      engagement: influencer.twitter_engagement,
+      isVerified: influencer.is_verified && influencer.twitter_followers > 0 && influencer.total_verified_followers_count > 0
+    },
+  ].filter(p => p.href || p.followers > 0) as Array<{ label: string; href: string | null; icon: JSX.Element; followers: number; engagement: number | null; isVerified: boolean }>;
 
   return (
     <div>
@@ -391,199 +431,204 @@ const InfluencerView = ({
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           <div className="space-y-4 lg:col-span-5">
             <div className="space-y-4 lg:sticky lg:top-24">
-              <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
+              <div className="rounded-3xl border border-slate-200/50 bg-white/80 backdrop-blur-xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
 
-                <div className="flex flex-col gap-6">
-                  {/* Top Header: Avatar + Name info */}
-                  <div className="flex items-center gap-5">
-                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
-                      {influencer.avatar_url ? (
-                        <img src={influencer.avatar_url} alt={influencer.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-slate-400">
-                          {initials}
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col items-center gap-4 text-center">
+                    <div className="group relative">
+                      <div className="relative h-24 w-24 overflow-hidden rounded-[2rem] border-4 border-white bg-slate-100 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.12)] transition-all duration-500 group-hover:scale-95 group-hover:rounded-[2.5rem] group-hover:shadow-2xl">
+                        {!influencer.avatar_url ? (
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-200">
+                            <User size={32} className="text-slate-400" />
+                          </div>
+                        ) : (
+                          <img
+                            src={influencer.avatar_url}
+                            alt={influencer.name}
+                            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                          />
+                        )}
+                        <div className="absolute inset-0 ring-1 ring-inset ring-black/5 rounded-[inherit]" />
+                      </div>
+                      {influencer.is_verified && (
+                        <div className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg ring-4 ring-white">
+                          <ShieldCheck size={14} fill="currentColor" fillOpacity={0.2} />
                         </div>
                       )}
                     </div>
 
-                    <div className="min-w-0 flex-1 text-center">
-                      <h2 className="font-display text-3xl font-bold tracking-tight text-slate-900">{influencer.name}</h2>
-                      <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-sm text-slate-500">
-                        <span className="flex items-center gap-1.5 font-medium text-slate-600">
-                          <MapPin size={14} className="text-slate-400" />
-                          {influencer.city}
-                        </span>
-                        <span className="flex items-center gap-1 font-bold text-slate-900">
-                          <Star size={14} className="fill-amber-400 text-amber-400" />
-                          {influencer.rating || "4.5"}
-                          <span className="ml-0.5 text-[11px] font-normal text-slate-400 uppercase tracking-wide">Rating</span>
-                        </span>
+                    <div className="min-w-0 flex-1 px-2">
+                      <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                        {influencer.name}
+                      </h1>
+                      <div className="flex items-center justify-center gap-2 mt-1">
+                        <div className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-600">
+                          <MapPin size={12} className="text-slate-400" />
+                          <span className="text-[10px] font-bold uppercase tracking-tight">{influencer.city}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 rounded-full bg-teal-50 px-2.5 py-0.5 text-teal-600 ring-1 ring-inset ring-teal-100/50">
+                          <span className="text-[10px] font-bold uppercase tracking-tight">{influencer.niche}</span>
+                        </div>
+                      </div>
 
-                      </div>
-                      <div className="mt-3 flex justify-center">
-                        <Badge variant="outline" className="h-6 rounded-lg border-teal-100 bg-teal-50/50 px-2.5 text-[11px] font-bold text-teal-700">
-                          {influencer.niche}
-                        </Badge>
-                      </div>
-                      </div>
-                      
-                      {/* Metric Summary Bar */}
-                      <div className="mt-8 flex items-center justify-around border-y border-slate-100 py-6">
-                        <div className="flex flex-col items-center">
-                          <span className="text-2xl font-black text-slate-900 leading-none tracking-tight">
-                            {formatFollowers(Number(influencer.total_followers_count) || 0)}
-                          </span>
-                          <span className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Reach</span>
-                        </div>
-                        <div className="h-8 w-px bg-slate-100" />
-                        <div className="flex flex-col items-center">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-2xl font-black text-teal-600 leading-none tracking-tight">
-                              {formatFollowers(Number(influencer.total_verified_followers_count) || 0)}
-                            </span>
-                            <ShieldCheck size={16} className="text-teal-500 fill-teal-50" />
+                      <div className="flex w-full items-center justify-center py-3 mt-4 border-y border-slate-100/60">
+                        {Number(influencer.total_followers_count) > 0 && Number(influencer.total_followers_count) === Number(influencer.total_verified_followers_count) ? (
+                          /* Centered Hero State for 100% Verified */
+                          <div className="flex flex-col items-center">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl font-black text-teal-600 leading-none">
+                                {formatFollowers(Number(influencer.total_verified_followers_count) || 0)}
+                              </span>
+                              <ShieldCheck size={18} className="text-teal-500" />
+                            </div>
+                            <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-teal-600/70">100% Verified Reach</span>
                           </div>
-                          <span className="mt-2 text-[10px] font-bold uppercase tracking-widest text-teal-600/60">Verified Reach</span>
-                        </div>
+                        ) : (
+                          /* Standard Split View for Mixed Verification */
+                          <div className="flex w-full items-center justify-center gap-6">
+                            <div className="flex flex-col items-center">
+                              <span className="text-base font-black text-slate-900 leading-none">
+                                {formatFollowers(Number(influencer.total_followers_count) || 0)}
+                              </span>
+                              <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Total Reach</span>
+                            </div>
+                            
+                            <div className="h-6 w-px bg-slate-100" />
+
+                            <div className="flex flex-col items-center">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-base font-black text-teal-600 leading-none">
+                                  {formatFollowers(Number(influencer.total_verified_followers_count) || 0)}
+                                </span>
+                                <ShieldCheck size={14} className="text-teal-500" />
+                              </div>
+                              <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-teal-600/70">Verified Reach</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="px-1">
+                    <div className="px-2">
                       {/* Bio Section */}
                       {influencer.bio && (
-                        <p className="text-sm leading-7 text-slate-600 italic">
+                        <p className="text-xs leading-5 text-slate-500 italic line-clamp-2">
                           "{influencer.bio}"
                         </p>
                       )}
                     </div>
+                  </div>
 
-                  {/* Verified Socials List (The "Column" Section) */}
+                  {/* Compact Platform Row */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Verified Presence</h3>
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Presence</h3>
                       {influencer.is_verified && (
-                        <div className="flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-teal-600 border border-teal-100/50">
-                          <ShieldCheck size={12} fill="currentColor" fillOpacity={0.2} />
-                          <span className="text-[9px] font-bold uppercase tracking-tight">Authenticated</span>
+                        <div className="flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-teal-600">
+                          <ShieldCheck size={10} fill="currentColor" fillOpacity={0.2} />
+                          <span className="text-[9px] font-black uppercase">Verified</span>
                         </div>
                       )}
                     </div>
                     
-                    <div className="flex flex-col gap-2">
-                      {verifiedSocials.map((platform) => (
+                    <div className="flex flex-wrap gap-2">
+                      {platformPresence.map((platform) => (
                         <div
                           key={platform.label}
-                          className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-3 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)]"
+                          className={`group flex items-center gap-2 rounded-xl border px-3 py-1.5 shadow-sm transition-all ${
+                            platform.isVerified 
+                              ? "border-teal-100 bg-teal-50/30 hover:border-teal-200" 
+                              : "border-slate-100 bg-white hover:border-slate-200"
+                          }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 border border-slate-200/60 transition-colors">
-                              {platformIcon(platform.label === "X (Twitter)" ? "Twitter" : platform.label, 16)}
-                            </span>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold text-slate-800 leading-tight">
-                                {platform.label.split(" (")[0]}
-                              </span>
-                              <span className="text-[9px] font-medium text-slate-400">Official Profile</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-
-                            <div className="flex flex-col items-end leading-none">
-                              <span className="text-sm font-black text-slate-900">
-                                {formatFollowers(platform.followers)}
-                              </span>
-                              <span className="text-[8px] mt-0.5 font-bold text-teal-600 uppercase tracking-tight">
-                                Reach
-                              </span>
-                            </div>
-                          </div>
+                          <span className={`${platform.isVerified ? "text-teal-600" : "text-slate-400"} transition-colors`}>
+                            {platformIcon(platform.label === "X (Twitter)" ? "Twitter" : platform.label, 14)}
+                          </span>
+                          <span className={`text-xs font-black leading-none ${platform.isVerified ? "text-teal-700" : "text-slate-900"}`}>
+                            {formatFollowers(platform.followers)}
+                          </span>
+                          {platform.isVerified && (
+                            <ShieldCheck size={10} className="text-teal-500" />
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
-                </div>
-                {(!influencer.is_verified || verifiedSocials.length < 3) && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Verification</p>
-                        <p className="mt-1 text-sm font-medium text-slate-900">
-                          {verifiedSocials.length > 0 ? "Social accounts connected" : "Social accounts not connected"}
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
-                          {verifiedSocials.length > 0
-                            ? `${verifiedSocials.length} verified platform${verifiedSocials.length > 1 ? "s" : ""} visible on your profile.`
-                            : isOwner
-                              ? "Verify at least one social account to show platforms, audience stats, and trust signals."
-                              : "This creator has not connected any verified social accounts yet."}
-                        </p>
-                      </div>
-                      <div className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${verifiedSocials.length > 0
-                        ? "bg-teal-50 text-teal-700"
-                        : "bg-slate-200 text-slate-600"
-                        }`}>
-                        {verifiedSocials.length > 0 ? `${verifiedSocials.length} linked` : "Not verified"}
-                      </div>
-                    </div>
-                    {isOwner && (
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="mt-2 h-auto p-0 text-xs font-semibold text-teal-700"
-                        onClick={() => navigate("/edit-profile?section=verification")}
-                      >
-                        {verifiedSocials.length > 0 ? "Manage verification" : "Verify socials"}
-                      </Button>
-                    )}
-                  </div>
-                )}
-                <div className="border-t border-slate-100 pt-4">
-                  <h3 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-slate-400">Service Pricing</h3>
-                  <div className="mb-5 space-y-3">
-                    <PriceRow icon={<Film size={16} />} label="Reel Promotion" value={influencer.price_reel} tone="teal" />
-                    <PriceRow icon={<Play size={16} />} label="Story Promotion" value={influencer.price_story} tone="amber" />
-                    <PriceRow icon={<MapPin size={16} />} label="Visit & Review" value={influencer.price_visit} tone="slate" />
-                  </div>
 
-                  {isOwner ? (
-                    <Button className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800" onClick={() => navigate("/edit-profile")}>
-                      Edit Your Profile
-                    </Button>
-                  ) : !user ? (
-                    <Button
-                      className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
-                      onClick={() => navigate("/auth")}
-                    >
-                      Sign In to Book
-                    </Button>
-                  ) : !brandId ? (
-                    <div className="space-y-2">
-                      <Button
-                        className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
-                        onClick={() => navigate("/register-brand")}
-                      >
-                        Join as Brand to Book
-                      </Button>
-                      <p className="text-xs text-slate-500">
-                        Direct bookings are available for brand accounts.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Button
-                        className="h-11 w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
-                        onClick={() => setBookingOpen(true)}
-                      >
-                        Book This Influencer
-                      </Button>
-                      <p className="text-xs text-slate-500">
-                        Send a direct booking request using this creator&apos;s public rate card.
-                      </p>
+                  {/* Account Trust CTA - Only shown if zero verified platforms */}
+                  {platformPresence.every(p => !p.isVerified) && (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
+                      <div className="flex items-start gap-4">
+                        <div className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl bg-slate-200 text-slate-500 shadow-sm">
+                          <ShieldCheck size={16} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Trust Status</p>
+                          <p className="text-xs font-black text-slate-900 mt-1">Pending Verification</p>
+                          <p className="text-[10px] leading-4 text-slate-500 mt-1.5">
+                            {isOwner 
+                              ? "Verify your identity to increase brand trust and visibility."
+                              : "This creator's account metrics are pending authentication."}
+                          </p>
+                          {isOwner && (
+                            <Button
+                              variant="link"
+                              className="h-auto p-0 mt-2 text-[10px] font-black text-teal-600 hover:text-teal-700 decoration-teal-500/30 underline-offset-4 hover:underline"
+                              onClick={() => navigate("/edit-profile?section=verification")}
+                            >
+                              Verify Account Now →
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
+
+                  {/* Compact Collaboration Packages */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Collaboration</h3>
+                      <div className="h-px flex-1 bg-slate-100 ml-3" />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <PriceRow icon={<Film size={16} />} label="Reel Creation" value={influencer.price_reel} tone="teal" />
+                      <PriceRow icon={<Play size={16} />} label="Instant Story" value={influencer.price_story} tone="amber" />
+                      <PriceRow icon={<MapPin size={16} />} label="Store Discovery" value={influencer.price_visit} tone="slate" />
+                    </div>
+
+                    <div className="pt-1">
+                      {isOwner ? (
+                        <Button className="h-10 w-full rounded-xl bg-slate-900 text-xs font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover:-translate-y-0.5" onClick={() => navigate("/edit-profile")}>
+                          Edit Profile
+                        </Button>
+                      ) : !user ? (
+                        <Button
+                          className="h-10 w-full rounded-xl bg-slate-900 text-xs font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover:-translate-y-0.5"
+                          onClick={() => navigate("/auth")}
+                        >
+                          Sign In
+                        </Button>
+                      ) : !brandId ? (
+                        <Button
+                          className="h-10 w-full rounded-xl bg-teal-600 text-xs font-bold text-white shadow-lg shadow-teal-100 hover:bg-teal-700 transition-all hover:-translate-y-0.5"
+                          onClick={() => navigate("/register-brand")}
+                        >
+                          Join as Brand Partner
+                        </Button>
+                      ) : (
+                        <Button
+                          className="h-10 w-full rounded-xl bg-slate-900 text-xs font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover:-translate-y-0.5"
+                          onClick={() => setBookingOpen(true)}
+                        >
+                          Send Booking Request
+                        </Button>
+                      )}
+                    </div>
                 </div>
               </div>
             </div>
+          </div>
           </div>
 
           <div className="space-y-5 lg:col-span-7">
@@ -591,33 +636,42 @@ const InfluencerView = ({
 
 
             <Tabs defaultValue="portfolio" className="w-full">
-              <TabsList className="mb-4 h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 whitespace-nowrap">
-                <TabsTrigger value="portfolio" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
-                  Portfolio ({portfolioItems.length})
+              <TabsList className="mb-8 h-auto w-full justify-start gap-8 overflow-x-auto rounded-none border-b border-slate-100 bg-transparent p-0 whitespace-nowrap scrollbar-none">
+                <TabsTrigger value="portfolio" className="group relative rounded-none border-b-2 border-transparent bg-transparent px-2 pb-4 text-sm font-bold text-slate-400 transition-all data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
+                  <div className="flex items-center gap-2">
+                    <Image size={16} className="transition-colors group-data-[state=active]:text-teal-600" />
+                    Portfolio ({portfolioItems.length})
+                  </div>
                 </TabsTrigger>
-                <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
-                  Campaign History ({collaborations.length})
+                <TabsTrigger value="history" className="group relative rounded-none border-b-2 border-transparent bg-transparent px-2 pb-4 text-sm font-bold text-slate-400 transition-all data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
+                  <div className="flex items-center gap-2">
+                    <Briefcase size={16} className="transition-colors group-data-[state=active]:text-teal-600" />
+                    History ({collaborations.length})
+                  </div>
                 </TabsTrigger>
-                <TabsTrigger value="reviews" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 text-sm font-semibold text-slate-500 data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
-                  Client Reviews ({reviewSummary.count})
+                <TabsTrigger value="reviews" className="group relative rounded-none border-b-2 border-transparent bg-transparent px-2 pb-4 text-sm font-bold text-slate-400 transition-all data-[state=active]:border-teal-500 data-[state=active]:text-slate-900">
+                  <div className="flex items-center gap-2">
+                    <Star size={16} className="transition-colors group-data-[state=active]:text-teal-600" />
+                    Reviews ({reviewSummary.count})
+                  </div>
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="portfolio" className="m-0">
-                <div className="mb-4 flex items-center justify-between gap-3">
+              <TabsContent value="portfolio" className="m-0 focus-visible:outline-none">
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900">Portfolio Highlights</h3>
-                    <p className="text-xs text-slate-500">
-                      Browse published creator work, media uploads, and featured collaborations.
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Portfolio Highlights</h3>
+                    <p className="text-sm text-slate-500 font-medium">
+                      Curated work and premium creator collaborations.
                     </p>
                   </div>
                   {isOwner && (
                     <Button
                       type="button"
-                      className="rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-800"
+                      className="rounded-2xl bg-slate-900 px-6 font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover:-translate-y-0.5"
                       onClick={() => navigate("/edit-profile?section=portfolio")}
                     >
-                      Add Portfolio Item
+                      Add New Item
                     </Button>
                   )}
                 </div>
@@ -625,53 +679,49 @@ const InfluencerView = ({
                 {portfolioItems.length > 0 ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {portfolioItems.map((item) => (
-                      <a
+                      <div
                         key={item.id}
-                        href={item.external_url || item.media_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-teal-200 hover:bg-teal-50/40"
+                        onClick={() => setSelectedItem(item)}
+                        className="group relative flex flex-col cursor-pointer overflow-hidden rounded-[2.5rem] border border-slate-200/60 bg-white p-2 transition-all hover:border-teal-200 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.08)]"
                       >
-                        <div className="aspect-[16/10] overflow-hidden bg-slate-100">
+                        <div className="aspect-[16/10] overflow-hidden rounded-[2rem] bg-slate-50">
                           {["video", "reel", "story"].includes(item.media_type) ? (
                             <video
                               src={item.media_url}
                               poster={item.thumbnail_url || undefined}
-                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
                               muted
                               playsInline
                               preload="metadata"
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_rgba(241,245,249,0.95))] p-3">
+                            <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,1),_rgba(248,250,252,1))] p-6">
                               <img
                                 src={item.thumbnail_url || item.media_url}
                                 alt={item.title}
-                                className="max-h-full max-w-full rounded-lg object-contain shadow-sm transition-transform duration-300 group-hover:scale-[1.03]"
+                                className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl shadow-slate-200 transition-transform duration-700 group-hover:scale-110"
                                 loading="lazy"
                               />
                             </div>
                           )}
-                        </div>
-                        <div className="space-y-3 p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                                {item.platform || "Portfolio"}
-                              </p>
-                              {!isGeneratedPortfolioTitle(item) && (
-                                <h4 className="mt-1 text-sm font-semibold text-slate-900 transition-colors group-hover:text-teal-700">
-                                  {item.title}
-                                </h4>
-                              )}
-                            </div>
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                              {contentTypeIcon(item.media_type)}
-                            </div>
+                          <div className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/90 backdrop-blur-md text-slate-900 shadow-lg transition-transform group-hover:scale-110">
+                            {contentTypeIcon(item.media_type)}
                           </div>
-                          {item.description && <p className="text-xs leading-5 text-slate-500">{item.description}</p>}
                         </div>
-                      </a>
+                        <div className="space-y-2 p-5 pt-4">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-teal-600">
+                              {item.platform || "Work Showcase"}
+                            </p>
+                          </div>
+                          {!isGeneratedPortfolioTitle(item) && (
+                            <h4 className="text-base font-black text-slate-900 tracking-tight transition-colors group-hover:text-teal-700">
+                              {item.title}
+                            </h4>
+                          )}
+                          {item.description && <p className="text-xs leading-6 text-slate-500 font-medium line-clamp-2">{item.description}</p>}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -691,73 +741,85 @@ const InfluencerView = ({
                 )}
               </TabsContent>
 
-              <TabsContent value="history" className="m-0">
+              <TabsContent value="history" className="m-0 focus-visible:outline-none">
+                <div className="mb-6">
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Campaign History</h3>
+                  <p className="text-sm text-slate-500 font-medium">Verified collaborations and successful brand partnerships.</p>
+                </div>
+
                 {collaborations.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     {collaborations.map((item) => (
                       <Link key={item.id} to={`/campaign/${item.id}`} state={{ backTo: profileBackTo }} className="group">
-                        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:bg-teal-50/40">
-                          <div className="mb-3 flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.brand}</p>
-                              <h4 className="mt-1 text-sm font-semibold text-slate-900 transition-colors group-hover:text-teal-700">
+                        <div className="flex flex-col h-full rounded-[2rem] border border-slate-200/60 bg-white p-6 shadow-sm transition-all hover:border-teal-200 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.08)]">
+                          <div className="mb-4 flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-teal-600">{item.brand}</p>
+                              <h4 className="mt-1 text-base font-black text-slate-900 tracking-tight transition-colors group-hover:text-teal-700 line-clamp-2">
                                 {item.description}
                               </h4>
                             </div>
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 border border-slate-100 transition-colors group-hover:bg-teal-50 group-hover:text-teal-600">
                               {contentTypeIcon(item.deliverables?.[0]?.toLowerCase() || "post")}
                             </div>
                           </div>
 
-                          <div className="mb-3 flex flex-wrap gap-2">
+                          <div className="mb-4 flex flex-wrap gap-2">
                             <MiniBadge label={item.niche} />
                             <MiniBadge label={item.city} />
-                            <MiniBadge label={`Rs. ${item.budget.toLocaleString()}`} />
+                            <span className="rounded-full bg-slate-900 px-3 py-1 text-[10px] font-black text-white uppercase tracking-widest">
+                              Rs. {item.budget.toLocaleString()}
+                            </span>
                           </div>
 
-                          <p className="text-xs text-slate-500">
+                          <p className="mt-auto text-xs font-medium leading-5 text-slate-500 border-t border-slate-50 pt-4">
                             {(item.deliverables || []).length > 0
                               ? `Deliverables: ${item.deliverables.join(", ")}`
-                              : "Deliverables not specified."}
+                              : "Standard collaboration deliverables."}
                           </p>
                         </div>
                       </Link>
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center">
-                    <p className="text-sm font-medium text-slate-500">No completed collaborations to show yet.</p>
+                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-16 text-center">
+                    <p className="text-sm font-bold text-slate-500">No completed collaborations recorded yet.</p>
                   </div>
                 )}
               </TabsContent>
 
-              <TabsContent value="reviews" className="m-0">
-                <div className="space-y-4">
-                  <Card className="border-slate-200/60 shadow-sm">
-                    <CardContent className="grid gap-4 p-5 md:grid-cols-[180px_1fr] md:items-center">
-                      <div className="text-center">
-                        <div className="font-display text-4xl font-bold text-slate-900">{reviewSummary.average}</div>
-                        <div className="mt-1 flex items-center justify-center gap-0.5">
+              <TabsContent value="reviews" className="m-0 focus-visible:outline-none">
+                <div className="mb-6">
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Client Feedback</h3>
+                  <p className="text-sm text-slate-500 font-medium">Reputation and trust signals from past brand partners.</p>
+                </div>
+
+                <div className="space-y-6">
+                  <Card className="overflow-hidden rounded-[2rem] border border-slate-200/60 shadow-sm transition-all hover:shadow-md">
+                    <CardContent className="grid gap-8 p-8 md:grid-cols-[200px_1fr] md:items-center">
+                      <div className="flex flex-col items-center justify-center space-y-3 border-r border-slate-100 pr-8 text-center md:border-r">
+                        <div className="font-display text-6xl font-black text-slate-900 tracking-tighter">{reviewSummary.average}</div>
+                        <div className="flex items-center justify-center gap-1">
                           {[...Array(5)].map((_, index) => (
                             <Star
                               key={index}
-                              size={14}
-                              className={index < Math.round(Number(reviewSummary.average)) ? "fill-amber-400 text-amber-400" : "text-slate-200"}
+                              size={18}
+                              className={index < Math.round(Number(reviewSummary.average)) ? "fill-amber-400 text-amber-400 shadow-sm" : "text-slate-100"}
                             />
                           ))}
                         </div>
-                        <div className="mt-1 text-xs text-slate-500">{reviewSummary.count} real reviews</div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{reviewSummary.count} Authenticated Reviews</div>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {reviewSummary.distribution.map((item) => (
-                          <div key={item.star} className="flex items-center gap-3 text-xs">
-                            <span className="w-4 text-slate-500">{item.star}</span>
-                            <Star size={10} className="fill-amber-400 text-amber-400" />
-                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                              <div className="h-full rounded-full bg-amber-400" style={{ width: `${item.pct}%` }} />
+                          <div key={item.star} className="flex items-center gap-4 text-xs">
+                            <span className="w-4 font-black text-slate-400">{item.star}</span>
+                            <Star size={12} className="fill-amber-400 text-amber-400" />
+                            <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-50">
+                              <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-amber-500 shadow-sm transition-all duration-500" style={{ width: `${item.pct}%` }} />
                             </div>
-                            <span className="w-6 text-right text-slate-500">{item.count}</span>
+                            <span className="w-8 text-right font-black text-slate-900">{item.count}</span>
                           </div>
                         ))}
                       </div>
@@ -787,11 +849,86 @@ const InfluencerView = ({
             onClose={() => setBookingOpen(false)}
           />
         )}
+
+        <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
+          <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-[2.5rem] border-none bg-white shadow-2xl">
+            {selectedItem && (
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] h-full max-h-[90vh] md:max-h-[80vh] overflow-y-auto md:overflow-hidden">
+                {/* Media Section */}
+                <div className="relative bg-slate-50 flex items-center justify-center overflow-hidden border-b md:border-b-0 md:border-r border-slate-100 min-h-[300px] md:min-h-0">
+                  {["video", "reel", "story"].includes(selectedItem.media_type) ? (
+                    <video
+                      src={selectedItem.media_url}
+                      poster={selectedItem.thumbnail_url || undefined}
+                      className="max-h-full w-full object-contain"
+                      controls
+                      autoPlay
+                      playsInline
+                    />
+                  ) : (
+                    <img
+                      src={selectedItem.thumbnail_url || selectedItem.media_url}
+                      alt={selectedItem.title}
+                      className="max-h-full max-w-full object-contain p-6 drop-shadow-2xl"
+                    />
+                  )}
+                  <div className="absolute top-6 left-6 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/90 backdrop-blur-md text-slate-900 shadow-xl">
+                    {contentTypeIcon(selectedItem.media_type)}
+                  </div>
+                </div>
+
+                {/* Content Section */}
+                <div className="flex flex-col p-8 md:p-10 h-full overflow-y-auto">
+                  <div className="mb-6 flex items-center justify-between">
+                    <span className="rounded-full bg-teal-50 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-teal-600 border border-teal-100/50">
+                      {selectedItem.platform || "Work Showcase"}
+                    </span>
+                  </div>
+
+                  <h2 className="mb-4 text-2xl md:text-3xl font-black tracking-tight text-slate-900 leading-tight">
+                    {selectedItem.title}
+                  </h2>
+
+                  <div className="prose prose-slate prose-sm max-w-none">
+                    <p className="text-base leading-8 text-slate-600 font-medium">
+                      {selectedItem.description}
+                    </p>
+                  </div>
+
+                  <div className="mt-auto pt-10">
+                    <div className="flex flex-col gap-4">
+                      {selectedItem.external_url && (
+                        <Button
+                          className="w-full rounded-2xl bg-slate-900 py-6 font-bold text-white shadow-xl shadow-slate-200 transition-all hover:bg-slate-800 hover:-translate-y-1 active:translate-y-0"
+                          onClick={() => window.open(selectedItem.external_url, "_blank")}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          View Original Content
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        className="w-full rounded-2xl border-slate-200 py-6 font-bold text-slate-600 hover:bg-slate-50"
+                        onClick={() => setSelectedItem(null)}
+                      >
+                        Close Details
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
 };
 
+/**
+ * BrandView renders the profile page for a business.
+ * It focuses on their industry, target audience, and open campaigns.
+ */
 const BrandView = ({
   brand,
   campaigns,

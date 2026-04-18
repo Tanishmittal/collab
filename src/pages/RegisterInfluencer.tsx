@@ -9,7 +9,17 @@ import { useAuth } from "@/contexts/AuthContext";
 const RegisterInfluencer = () => {
   const navigate = useNavigate();
   const { loading, influencerId } = useAuth();
-  const { step, setStep, submitting, form, update, canProceed, handleSubmit } = useInfluencerRegistration(() => {
+  const { 
+    step, 
+    setStep, 
+    submitting, 
+    form, 
+    update, 
+    canProceed, 
+    handleSubmit, 
+    nextStep, 
+    isValidatingSlug 
+  } = useInfluencerRegistration(() => {
     navigate("/");
   });
 
@@ -53,6 +63,8 @@ const RegisterInfluencer = () => {
               update={update}
               canProceed={canProceed}
               handleSubmit={handleSubmit}
+              nextStep={nextStep}
+              isValidatingSlug={isValidatingSlug}
             />
           </div>
         </div>

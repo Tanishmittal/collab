@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Instagram, Youtube, Twitter, Loader2, Copy, CheckCircle, ExternalLink, ShieldCheck, XCircle, RotateCcw } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Instagram, Youtube, Twitter, Loader2, Copy, CheckCircle, ExternalLink, ShieldCheck, XCircle, RotateCcw, Link, Info, AlertTriangle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface SocialVerificationProps {
-  verificationCode: string;
+  verificationCode: string; // This is the 'slug'
   isVerified: boolean;
   verifiedPlatforms: string[];
   instagramUrl: string;
@@ -28,20 +30,19 @@ interface SocialVerificationProps {
   onVerifiedPlatformsChange: (platforms: string[]) => void;
   onUnverified?: (platformId: string) => void;
   onStatsFetched?: (stats: { followers?: string; engagementRate?: string; platform?: string; totalFollowers?: number; verifiedFollowers?: number }) => void;
+  onVerificationCodeChange?: (v: string) => void;
   totalFollowers?: number;
+  showGuideInitial?: boolean;
+  initialSlug?: string;
 }
 
+// STANDARD PLATFORMS (Sentence Case to match DB)
 const PLATFORMS = [
-  { id: "instagram", label: "Instagram", icon: Instagram, placeholder: "@yourhandle or yourhandle", color: "text-pink-500" },
-  { id: "youtube", label: "YouTube", icon: Youtube, placeholder: "@yourchannel", color: "text-red-500" },
-  { id: "twitter", label: "X (Twitter)", icon: Twitter, placeholder: "@yourhandle", color: "text-sky-500" },
+  { id: "Instagram", label: "Instagram", icon: Instagram, placeholder: "@yourhandle", color: "text-pink-500" },
+  { id: "YouTube", label: "YouTube", icon: Youtube, placeholder: "@yourchannel", color: "text-red-500" },
+  { id: "Twitter", label: "X (Twitter)", icon: Twitter, placeholder: "@yourhandle", color: "text-sky-500" },
 ] as const;
 
-const toStoredPlatform = (platformId: string) =>
-  platformId === "instagram" ? "Instagram" : platformId === "youtube" ? "YouTube" : "Twitter";
-
-const toPlatformId = (platform: string) =>
-  platform === "Instagram" ? "instagram" : platform === "YouTube" ? "youtube" : "twitter";
 export const SocialVerification = ({
   verificationCode,
   isVerified,
@@ -62,35 +63,77 @@ export const SocialVerification = ({
   onVerifiedPlatformsChange,
   onUnverified,
   onStatsFetched,
-  totalFollowers,
+  onVerificationCodeChange,
+  showGuideInitial = true,
+  initialSlug,
 }: SocialVerificationProps) => {
   const { toast } = useToast();
   const [verifying, setVerifying] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [verifiedPlatformSet, setVerifiedPlatformSet] = useState<Set<string>>(
-    () => new Set(verifiedPlatforms.map(toPlatformId))
-  );
+  const [showGuide, setShowGuide] = useState(showGuideInitial);
+  
+  // Uniqueness validation state
+  const [isValidatingSlug, setIsValidatingSlug] = useState(false);
+  const [slugStatus, setSlugStatus] = useState<"available" | "taken" | "idle" | "too-short">("idle");
 
+  const urls: Record<string, string> = { Instagram: instagramUrl, YouTube: youtubeUrl, Twitter: twitterUrl };
+  const setters: Record<string, (v: string) => void> = { Instagram: onInstagramChange, YouTube: onYoutubeChange, Twitter: onTwitterChange };
+  const followerValues: Record<string, string> = { Instagram: igFollowers, YouTube: ytSubscribers, Twitter: twitterFollowers };
+  const followerSetters: Record<string, (v: string) => void> = { Instagram: onIgFollowersChange, YouTube: onYtSubscribersChange, Twitter: onTwitterFollowersChange };
+
+  // Check slug uniqueness
+  const checkSlugUniqueness = useCallback(async (slug: string) => {
+    if (!slug || slug.length < 4) {
+      setSlugStatus(slug.length > 0 ? "too-short" : "idle");
+      return;
+    }
+    
+    // Normalize: lowercase and alphanumeric
+    const sanitized = slug.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (sanitized !== slug) {
+       onVerificationCodeChange?.(sanitized);
+       return;
+    }
+
+    // FIX: If it already belongs to us, it's available
+    if (initialSlug && sanitized === initialSlug.toLowerCase()) {
+      setSlugStatus("available");
+      setIsValidatingSlug(false);
+      return;
+    }
+
+    setIsValidatingSlug(true);
+    try {
+      const { data, error } = await supabase
+        .from("influencer_profiles")
+        .select("verification_code")
+        .eq("verification_code", sanitized)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      setSlugStatus(data ? "taken" : "available");
+    } catch (err) {
+      console.error("Error checking slug:", err);
+    } finally {
+      setIsValidatingSlug(false);
+    }
+  }, [onVerificationCodeChange, initialSlug]);
+
+  // Debounce slug check
   useEffect(() => {
-    setVerifiedPlatformSet(new Set(verifiedPlatforms.map(toPlatformId)));
-  }, [verifiedPlatforms]);
-
-  const urls: Record<string, string> = { instagram: instagramUrl, youtube: youtubeUrl, twitter: twitterUrl };
-  const setters: Record<string, (v: string) => void> = { instagram: onInstagramChange, youtube: onYoutubeChange, twitter: onTwitterChange };
-  const followerValues: Record<string, string> = { instagram: igFollowers, youtube: ytSubscribers, twitter: twitterFollowers };
-  const followerSetters: Record<string, (v: string) => void> = { instagram: onIgFollowersChange, youtube: onYtSubscribersChange, twitter: onTwitterFollowersChange };
-
-  const syncVerifiedPlatforms = (platformSet: Set<string>) => {
-    const nextPlatforms = Array.from(platformSet).map(toStoredPlatform);
-    setVerifiedPlatformSet(new Set(platformSet));
-    onVerifiedPlatformsChange(nextPlatforms);
-  };
+    const timer = setTimeout(() => {
+      checkSlugUniqueness(verificationCode);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [verificationCode, checkSlugUniqueness]);
 
   const copyCode = async () => {
-    await navigator.clipboard.writeText(verificationCode);
+    const fullString = `Collab: Influgal.com/${verificationCode}`;
+    await navigator.clipboard.writeText(fullString);
     setCopied(true);
-    toast({ title: "Copied", description: "Paste this code in your social media bio." });
+    toast({ title: "Copied", description: "Verification string copied to clipboard" });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -105,7 +148,7 @@ export const SocialVerification = ({
     try {
       const { data, error } = await supabase.functions.invoke("social-service-apify", {
         body: {
-          platform: platformId,
+          platform: platformId.toLowerCase(), // scraper expects lowercase
           url: socialUrl,
           verificationCode: verificationCode,
           action: "verify"
@@ -126,14 +169,12 @@ export const SocialVerification = ({
           followers: data.stats.followers,
           engagementRate: data.stats.engagement_rate,
           platform: platformId,
-          totalFollowers: data.stats.totalFollowers,
         });
       }
 
       if (data.verified) {
-        const nextVerified = new Set(verifiedPlatformSet);
-        nextVerified.add(platformId);
-        syncVerifiedPlatforms(nextVerified);
+        const nextPlatforms = [...new Set([...verifiedPlatforms, platformId])];
+        onVerifiedPlatformsChange(nextPlatforms);
         toast({
           title: "Verified",
           description: `Your account has been verified.${data.stats?.followers ? ` Followers: ${data.stats.followers}` : ""}`,
@@ -154,149 +195,220 @@ export const SocialVerification = ({
     }
   };
 
-  const handleRemoveVerification = async (platformId: string) => {
+  const handleRemoveVerification = (platformId: string) => {
     setRemoving(platformId);
-    try {
-      const platform = PLATFORMS.find((item) => item.id === platformId);
-      if (!platform) return;
-
-      const nextVerified = new Set(verifiedPlatformSet);
-      nextVerified.delete(platformId);
-      syncVerifiedPlatforms(nextVerified);
-      setters[platformId]("");
-
-      if (nextVerified.size === 0) {
-        onUnverified?.();
-      }
-
-      toast({ title: "Verification removed", description: `${platform.label} verification has been removed.` });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Could not remove verification.";
-      toast({ title: "Error", description: message, variant: "destructive" });
-    } finally {
-      setRemoving(null);
+    const nextPlatforms = verifiedPlatforms.filter(p => p !== platformId);
+    onVerifiedPlatformsChange(nextPlatforms);
+    setters[platformId]("");
+    
+    if (nextPlatforms.length === 0) {
+      onUnverified?.(platformId);
     }
+    
+    toast({ title: "Verification removed", description: `${platformId} verification has been removed.` });
+    setRemoving(null);
   };
 
   return (
-    <Card className="glass-card">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 font-display text-lg">
-          <ShieldCheck size={20} className="text-primary" />
-          Social Verification
+    <div className="w-full max-w-full space-y-6 overflow-hidden">
+      {/* 1. LINK / USERNAME BOX */}
+      <div className="rounded-2xl border border-orange-100 bg-orange-50/30 p-3 sm:rounded-3xl sm:p-8">
+        <div className="mb-4 sm:mb-6 flex items-center gap-3 sm:gap-4">
+          <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl sm:rounded-2xl bg-orange-100 text-orange-600 shadow-sm border border-orange-200/50 flex-shrink-0">
+            <Link className="h-6 w-6 sm:h-7 sm:w-7" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">Branded Verification</h4>
+            <p className="text-[10px] font-bold text-orange-500/80 uppercase tracking-widest truncate">Influgal Link</p>
+          </div>
           {isVerified && (
-            <Badge className="ml-auto border-success/30 bg-success/20 text-xs text-success">
-              <CheckCircle size={12} className="mr-1" /> Verified
+            <Badge className="ml-auto border-success/30 bg-success/20 text-[10px] text-success hidden sm:flex">
+              <CheckCircle size={10} className="mr-1" /> Profile Verified
             </Badge>
           )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
-          <div className="flex items-center justify-between mb-2">
-             <p className="text-sm text-muted-foreground">
-              Add code to your bio, then click <strong>Verify</strong>:
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-foreground">
-              {verificationCode}
-            </code>
-            <Button variant="outline" size="sm" onClick={copyCode} className="shrink-0">
-              {copied ? <CheckCircle size={14} className="text-success" /> : <Copy size={14} />}
-              {copied ? "Copied" : "Copy"}
-            </Button>
-          </div>
         </div>
 
+        <div className="relative mb-3">
+          <div className={cn(
+            "flex items-center rounded-xl sm:rounded-2xl border bg-white px-2 sm:px-5 shadow-sm ring-offset-white transition-all focus-within:ring-2 focus-within:ring-slate-950/5",
+            slugStatus === "taken" ? "border-red-300 focus-within:border-red-400" : "border-slate-200 focus-within:border-slate-400"
+          )}>
+            <span className="text-[8px] sm:text-[10px] font-black tracking-tighter text-slate-400 select-none whitespace-nowrap sm:tracking-widest">
+              <span className="hidden xs:inline">COLLAB: </span>INFLUGAL.COM/
+            </span>
+            <input
+              type="text"
+              id="verification-slug"
+              value={verificationCode}
+              onChange={(e) => onVerificationCodeChange?.(e.target.value)}
+              placeholder="USERNAME"
+              className="flex-1 min-w-0 bg-transparent py-3 pl-1 text-sm font-bold tracking-tight text-slate-800 placeholder:text-slate-300 focus:outline-none sm:py-5 sm:pl-2 sm:text-xl"
+            />
+            {isValidatingSlug ? (
+              <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-slate-400" />
+            ) : slugStatus === "available" ? (
+              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
+            ) : slugStatus === "taken" ? (
+              <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+            ) : slugStatus === "too-short" ? (
+              <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
+            ) : null}
+          </div>
+        </div>
+        
+        <AnimatePresence>
+          {slugStatus === "taken" && (
+            <motion.p
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mt-1 mb-4 flex items-center gap-1 text-[10px] font-bold text-red-500 sm:text-xs"
+            >
+              <AlertTriangle size={12} /> This handle is already taken.
+            </motion.p>
+          )}
+          {slugStatus === "too-short" && (
+            <motion.p
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mt-1 mb-4 flex items-center gap-1 text-[10px] font-bold text-amber-600 sm:text-xs"
+            >
+              <AlertCircle size={12} /> Minimum 4 characters required.
+            </motion.p>
+          )}
+        </AnimatePresence>
+
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1 h-14 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-sm font-bold text-slate-800 shadow-sm transition-all active:scale-[0.98]"
+            onClick={copyCode}
+          >
+            <Copy className="mr-2 h-5 w-5" />
+            {copied ? "Copied!" : "Copy string"}
+          </Button>
+        </div>
+      </div>
+
+      {/* 2. GUIDE BOX */}
+      <div className="overflow-hidden rounded-2xl border border-blue-100 bg-blue-50/50 transition-all">
+        <button 
+          onClick={() => setShowGuide(!showGuide)}
+          className="flex w-full items-center justify-between p-4 text-left focus:outline-none"
+        >
+          <h5 className="flex items-center gap-2 text-xs font-bold text-blue-900 uppercase tracking-wider">
+            <Info className="h-3.5 w-3.5" />
+            How to verify
+          </h5>
+          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest hover:text-blue-600 transition-colors">
+            {showGuide ? "Hide" : "Show"}
+          </span>
+        </button>
+        {showGuide && (
+          <div className="px-4 pb-4">
+            <ol className="ml-3 list-decimal space-y-1.5 text-[11px] leading-relaxed text-blue-800 font-medium">
+              <li>Copy your professional link above</li>
+              <li>Paste it into your Instagram, YouTube, or X bio</li>
+              <li>Click "Verify" on the platforms below</li>
+            </ol>
+          </div>
+        )}
+      </div>
+
+      {/* 3. PLATFORMS BOX */}
+      <div className="space-y-4">
         {PLATFORMS.map((platform) => {
           const Icon = platform.icon;
-          const isPlatformVerified = verifiedPlatformSet.has(platform.id);
+          const isPlatformVerified = verifiedPlatforms.includes(platform.id);
           return (
             <div key={platform.id} className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
+              <Label className="flex items-center gap-1.5 font-bold text-slate-700">
                 <Icon size={14} className={platform.color} /> {platform.label}
                 {isPlatformVerified && (
-                  <div className="flex items-center gap-1.5 ml-1">
-                    <Badge className="border-success/30 bg-success/20 px-1.5 py-0 text-[10px] text-success">
-                      <CheckCircle size={10} className="mr-0.5" /> Verified
-                    </Badge>
-                    {(followerValues[platform.id] !== undefined && followerValues[platform.id] !== null && followerValues[platform.id] !== "") && (
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        ({followerValues[platform.id]})
-                      </span>
-                    )}
-                  </div>
+                  <Badge className="border-success/30 bg-success/20 px-1.5 py-0 text-[10px] text-success ml-1">
+                    <CheckCircle size={10} className="mr-0.5" /> Verified
+                  </Badge>
                 )}
               </Label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1">
+              <div className="flex flex-row gap-1.5 sm:gap-3 pt-2 w-full">
+                <div className="flex-1 min-w-0 relative">
+                  <div className={cn(
+                    "absolute left-3 top-0 z-10 -translate-y-1/2 px-1 text-[8px] font-bold uppercase tracking-wider transition-colors bg-white",
+                    isPlatformVerified ? "text-emerald-500" : "text-slate-400"
+                  )}>
+                    Username
+                  </div>
                   <Input
                     value={urls[platform.id]}
                     onChange={(e) => setters[platform.id](e.target.value)}
                     placeholder={platform.placeholder}
-                    className="w-full"
+                    className="w-full rounded-xl border-slate-200 h-10 sm:h-12 font-medium px-2 sm:px-3 text-xs sm:text-sm bg-white"
                     disabled={isPlatformVerified}
                   />
                 </div>
-                <div className="w-full sm:w-32 relative">
+                <div className="w-16 sm:w-32 relative flex-shrink-0">
+                  <div className={cn(
+                    "absolute left-2 sm:left-3 top-0 z-10 -translate-y-1/2 px-1 text-[8px] font-bold uppercase tracking-wider transition-colors bg-white",
+                    isPlatformVerified ? "text-emerald-500" : "text-slate-400"
+                  )}>
+                    Followers
+                  </div>
                   <Input
                     type="number"
                     value={followerValues[platform.id]}
                     onChange={(e) => followerSetters[platform.id](e.target.value)}
-                    placeholder="Count"
-                    className="w-full pr-8"
+                    placeholder="0"
+                    className="w-full rounded-xl border-slate-200 h-10 sm:h-12 font-bold px-2 sm:px-3 text-xs sm:text-sm bg-white"
                     disabled={isPlatformVerified}
                   />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground/50 pointer-events-none">
-                    FL
-                  </div>
                 </div>
                 {isPlatformVerified ? (
-                  <div className="flex gap-2">
+                  <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleVerify(platform.id)}
                       disabled={verifying !== null}
-                      className="shrink-0 text-teal-600 hover:bg-teal-50"
+                      className="h-10 sm:h-12 w-10 sm:w-12 rounded-xl border-teal-200 text-teal-600 hover:bg-teal-50 p-0"
                     >
                       {verifying === platform.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                      {/* sync */}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleRemoveVerification(platform.id)}
                       disabled={removing !== null}
-                      className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="h-10 sm:h-12 w-10 sm:w-12 rounded-xl border-red-100 text-red-500 hover:bg-red-50 hover:text-red-600 p-0"
                     >
                       {removing === platform.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
-                      {/* remove */}
                     </Button>
                   </div>
                 ) : (
                   <Button
-                    variant="outline"
                     size="sm"
                     onClick={() => handleVerify(platform.id)}
                     disabled={!urls[platform.id]?.trim() || verifying !== null}
-                    className="shrink-0"
+                    className="h-10 sm:h-12 px-3 sm:px-8 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold text-[10px] sm:text-xs uppercase tracking-widest shadow-md transition-all active:scale-[0.98] flex-shrink-0 border-none"
                   >
-                    {verifying === platform.id ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                    Verify
+                    {verifying === platform.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      "Verify"
+                    )}
                   </Button>
                 )}
               </div>
             </div>
           );
         })}
-
-        <p className="text-xs text-muted-foreground">
-          Only verified socials are shown publicly. Metric updates are synced from your social accounts.
-        </p>
-      </CardContent>
-    </Card>
+      </div>
+      
+      <p className="text-[11px] font-medium text-slate-400 italic">
+        Verified socials are automatically updated with real-time metrics. Unverified platform metrics must be updated manually.
+      </p>
+    </div>
   );
 };
 

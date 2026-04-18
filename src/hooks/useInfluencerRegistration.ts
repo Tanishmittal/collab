@@ -18,10 +18,15 @@ export interface InfluencerFormData {
   priceStory: string;
   priceVisit: string;
   avatarUrl: string | null;
-  isVerified: boolean;
   instagramUrl: string;
   youtubeUrl: string;
   twitterUrl: string;
+  igFollowers: string;
+  ytFollowers: string;
+  twitterFollowers: string;
+  igVerified: boolean;
+  ytVerified: boolean;
+  twitterVerified: boolean;
   verificationCode: string;
 }
 
@@ -34,6 +39,9 @@ export const PLATFORMS = [
 const createVerificationCode = () =>
   Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join("").toUpperCase();
 
+const sanitizeSlug = (name: string) => 
+  name.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+
 export const useInfluencerRegistration = (onSuccess?: () => void) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -41,6 +49,7 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
   const { user, refreshProfiles } = useAuth();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [isValidatingSlug, setIsValidatingSlug] = useState(false);
 
   const [form, setForm] = useState<InfluencerFormData>({
     name: "",
@@ -58,24 +67,110 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
     instagramUrl: "",
     youtubeUrl: "",
     twitterUrl: "",
-    verificationCode: createVerificationCode(),
+    igFollowers: "",
+    ytFollowers: "",
+    twitterFollowers: "",
+    igVerified: false,
+    ytVerified: false,
+    twitterVerified: false,
+    verificationCode: "", // Now stores just the slug
+    slug: "", // Helper for the branded string
   });
 
   const update = (
-    field: keyof InfluencerFormData,
+    field: keyof InfluencerFormData | "slug",
     value: string | string[] | number | boolean | null
   ) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+      
+      // Keep verificationCode synced with slug if slug is edited
+      if (field === "slug") {
+        next.verificationCode = value as string;
+      }
+      
+      return next;
+    });
+  };
+
+  const findUniqueSlug = async (baseName: string) => {
+    const baseSlug = sanitizeSlug(baseName);
+    if (!baseSlug) return "";
+
+    setIsValidatingSlug(true);
+    try {
+      // 1. Get all profiles that START with this slug to check local gap
+      const { data: existing, error } = await supabase
+        .from("influencer_profiles")
+        .select("verification_code")
+        .ilike("verification_code", `${baseSlug}%`)
+        .limit(20);
+
+      if (error) throw error;
+
+      const taken = new Set(existing.map(p => p.verification_code?.toLowerCase()));
+
+      // 2. If base is free, use it
+      if (!taken.has(baseSlug)) {
+        setIsValidatingSlug(false);
+        return baseSlug;
+      }
+
+      // 3. Otherwise, try numeric suffixes alex1, alex2...
+      // Start with random 3 digits to jump ahead of simple names
+      let candidate = baseSlug + Math.floor(Math.random() * 900 + 100);
+      let attempts = 0;
+      
+      while (taken.has(candidate) && attempts < 5) {
+        candidate = baseSlug + Math.floor(Math.random() * 900 + 100);
+        attempts++;
+      }
+
+      setIsValidatingSlug(false);
+      return candidate;
+    } catch (error) {
+      console.error("Error checking slug uniqueness:", error);
+      setIsValidatingSlug(false);
+      return baseSlug + Math.floor(Math.random() * 1000);
+    }
+  };
+
+  const nextStep = async () => {
+    if (step === 0 && !form.verificationCode) {
+      // On moving from name step, generate the unique slug
+      const uniqueSlug = await findUniqueSlug(form.name);
+      setForm(prev => ({ 
+        ...prev, 
+        slug: uniqueSlug,
+        verificationCode: uniqueSlug 
+      }));
+    }
+    setStep((prev) => prev + 1);
   };
 
   const canProceed = () => {
     switch (step) {
       case 0:
-        return form.name.trim().length > 0 && form.avatarUrl !== null;
+        return form.name.trim().length >= 4 && form.avatarUrl !== null;
       case 1:
         return form.city.length > 0 && form.bio.trim().length > 0 && form.niche.length > 0;
       case 2:
-        return true;
+        const hasIgInput = form.instagramUrl.trim().length > 0;
+        const hasYtInput = form.youtubeUrl.trim().length > 0;
+        const hasTwitterInput = form.twitterUrl.trim().length > 0;
+        
+        // If they entered a handle, they MUST enter followers if not verified
+        if (hasIgInput && !form.igVerified && !form.igFollowers) return false;
+        if (hasYtInput && !form.ytVerified && !form.ytFollowers) return false;
+        if (hasTwitterInput && !form.twitterVerified && !form.twitterFollowers) return false;
+        
+        // ADDED: Must have at least one platform with followers > 0 total to proceed
+        const totalFollowers = 
+          (Number.parseInt(form.igFollowers, 10) || 0) + 
+          (Number.parseInt(form.ytFollowers, 10) || 0) + 
+          (Number.parseInt(form.twitterFollowers, 10) || 0);
+
+        return totalFollowers > 0;
       case 3:
         return (
           Number.parseInt(form.priceReel, 10) > 0 &&
@@ -108,17 +203,23 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
       city: form.city,
       bio: form.bio,
       niche: form.niche,
-      total_followers_count: parseFollowerCount(form.followers),
+      total_followers_count: 
+        (Number.parseInt(form.igFollowers, 10) || 0) + 
+        (Number.parseInt(form.ytFollowers, 10) || 0) + 
+        (Number.parseInt(form.twitterFollowers, 10) || 0),
       total_verified_followers_count: 0,
+      ig_followers: Number.parseInt(form.igFollowers, 10) || 0,
+      yt_subscribers: Number.parseInt(form.ytFollowers, 10) || 0,
+      twitter_followers: Number.parseInt(form.twitterFollowers, 10) || 0,
 
       platforms: form.platforms,
       price_reel: Number.parseInt(form.priceReel, 10) || 0,
       price_story: Number.parseInt(form.priceStory, 10) || 0,
       price_visit: Number.parseInt(form.priceVisit, 10) || 0,
-      is_verified: form.platforms.length > 0,
-      instagram_url: form.platforms.includes("Instagram") ? form.instagramUrl || null : null,
-      youtube_url: form.platforms.includes("YouTube") ? form.youtubeUrl || null : null,
-      twitter_url: form.platforms.includes("Twitter") ? form.twitterUrl || null : null,
+      is_verified: form.igVerified || form.ytVerified || form.twitterVerified,
+      instagram_url: form.instagramUrl || null,
+      youtube_url: form.youtubeUrl || null,
+      twitter_url: form.twitterUrl || null,
       verification_code: form.verificationCode,
       avatar_url: form.avatarUrl,
     };
@@ -176,5 +277,7 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
     update,
     canProceed,
     handleSubmit,
+    nextStep,
+    isValidatingSlug
   };
 };

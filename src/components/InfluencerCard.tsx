@@ -108,7 +108,7 @@ const InfluencerCard = ({
           </div>
 
           <div className="mb-0.5 flex min-w-0 items-center gap-1.5">
-            <h3 className="truncate text-lg font-black text-white sm:text-xl">{influencer.name}</h3>
+            <h3 className="truncate text-lg capitalize font-black text-white sm:text-xl">{influencer.name}</h3>
             {influencer.isVerified && <ShieldCheck size={14} className="shrink-0 fill-teal-400/20 text-teal-400" />}
           </div>
 
@@ -125,12 +125,23 @@ const InfluencerCard = ({
 
           <div className="mb-4 flex items-center gap-6">
             <div className="min-w-0">
-              <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-gray-400 sm:text-[10px]">Followers</p>
-              <p className="text-sm font-bold text-white sm:text-base">{formatFollowers(influencer.totalFollowers)}</p>
+              {influencer.totalFollowers > 0 && influencer.totalFollowers === influencer.totalVerifiedFollowers ? (
+                <>
+                  <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-teal-400 sm:text-[10px]">Verified Reach</p>
+
+                  <p className="text-sm font-bold text-teal-400 sm:text-base">{formatFollowers(influencer.totalFollowers)}</p>
+
+                </>
+              ) : (
+                <>
+                  <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-gray-400 sm:text-[10px]">Followers</p>
+                  <p className="text-sm font-bold text-white sm:text-base">{formatFollowers(influencer.totalFollowers)}</p>
+                </>
+              )}
             </div>
             <div className="h-8 w-[1px] self-center bg-white/15" />
             <div className="min-w-0">
-              <p className="mb-0.5 text-[8px] font-bold tracking-wider text-gray-400 sm:text-[10px]">Avg Collab Price</p>
+              <p className="mb-0.5 text-[8px] font-bold uppercase tracking-wider text-gray-400 sm:text-[10px]">Avg Collab Price</p>
               <p className="text-sm font-black text-white sm:text-base">₹ {influencer.priceReel.toLocaleString()}</p>
             </div>
           </div>

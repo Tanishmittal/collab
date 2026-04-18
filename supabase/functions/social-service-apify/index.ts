@@ -274,8 +274,9 @@ Deno.serve(async (req) => {
         throw new Error("Verification code not found in request or database.");
       }
 
-      const verified = bioText && bioText.toLowerCase().includes(verificationCode.toLowerCase());
-      console.log(`[Verify] Result: ${verified} (Searching for ${verificationCode} in bio)`);
+      const expectedLink = `Collab: Influgal.com/${verificationCode}`;
+      const verified = bioText && bioText.toLowerCase().includes(expectedLink.toLowerCase());
+      console.log(`[Verify] Result: ${verified} (Searching for ${expectedLink} in bio)`);
 
       if (verified) {
         const urlColumn = platform === "instagram" ? "instagram_url" : platform === "youtube" ? "youtube_url" : "twitter_url";

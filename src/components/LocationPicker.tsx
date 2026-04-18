@@ -47,7 +47,7 @@ export const LocationPicker = ({
         setActiveState(states[0]);
       }
     }
-  }, [open, value, citiesByState, states, activeState]);
+  }, [open, value, citiesByState, states]);
 
   const displayValue = value === "all" ? "All Cities" : value || placeholder;
 

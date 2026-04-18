@@ -19,6 +19,7 @@ import { useManagedOptions } from "@/hooks/useManagedOptions";
 import type { Database } from "@/integrations/supabase/types";
 import { goBackOr } from "@/lib/navigation";
 import { LocationPicker } from "@/components/LocationPicker";
+import { cn } from "@/lib/utils";
 
 type PortfolioItemRow = Database["public"]["Tables"]["portfolio_items"]["Row"];
 type InfluencerProfileRow = Database["public"]["Tables"]["influencer_profiles"]["Row"] & {
@@ -110,6 +111,7 @@ const EditInfluencerProfile = () => {
   const [ytLastVerified, setYtLastVerified] = useState<string | null>(null);
   const [twitterLastVerified, setTwitterLastVerified] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
+  const [initialSlug, setInitialSlug] = useState("");
   const [isVerified, setIsVerified] = useState(false);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioDraft[]>([]);
   const [removedPortfolioItemIds, setRemovedPortfolioItemIds] = useState<string[]>([]);
@@ -176,6 +178,7 @@ const EditInfluencerProfile = () => {
       setYtLastVerified(profile.yt_last_verified || null);
       setTwitterLastVerified(profile.twitter_last_verified || null);
       setVerificationCode(profile.verification_code || "");
+      setInitialSlug(profile.verification_code || "");
       setIsVerified(initialVerifiedPlatforms.length > 0);
 
       const { data: portfolioRows } = await supabase
@@ -233,13 +236,23 @@ const EditInfluencerProfile = () => {
       return;
     }
 
+    if (name.trim().length < 4) {
+      toast({ title: "Name too short", description: "Full name must be at least 4 characters.", variant: "destructive" });
+      return;
+    }
+
+    if (verificationCode.trim().length < 4) {
+      toast({ title: "Username too short", description: "Branded username must be at least 4 characters.", variant: "destructive" });
+      return;
+    }
+
     const verifiedPlatforms = platforms;
-    
+
     // Parse numeric inputs
     const igCount = parseInt(igFollowers) || 0;
     const ytCount = parseInt(ytSubscribers) || 0;
     const twCount = parseInt(twitterFollowers) || 0;
-    
+
     // Calculate totals
     const totalCount = igCount + ytCount + twCount;
     const verifiedCount = (
@@ -273,6 +286,7 @@ const EditInfluencerProfile = () => {
         youtube_url: youtubeUrl.trim() || null,
         twitter_url: twitterUrl.trim() || null,
         avatar_url: avatarUrl,
+        verification_code: verificationCode,
       })
       .eq("id", profileId);
 
@@ -366,8 +380,18 @@ const EditInfluencerProfile = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Full Name *</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} maxLength={100} className="mt-1.5" />
+              <div className="flex items-center justify-between">
+                <Label>Full Name *</Label>
+                {name.trim().length > 0 && name.trim().length < 4 && (
+                  <span className="text-[10px] font-bold text-amber-600">Min 4 characters required</span>
+                )}
+              </div>
+              <Input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                maxLength={100}
+                className={cn("mt-1.5", name.trim().length > 0 && name.trim().length < 4 && "border-amber-300 focus-visible:ring-amber-500")}
+              />
             </div>
             <div>
               <Label>City *</Label>
@@ -401,12 +425,12 @@ const EditInfluencerProfile = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             {[
-              { label: "Reel Promotion", emoji: "Reel", desc: "Short-form video content", value: priceReel, setter: setPriceReel },
-              { label: "Story Promotion", emoji: "Story", desc: "24-hour story feature", value: priceStory, setter: setPriceStory },
-              { label: "Visit & Review", emoji: "Visit", desc: "In-person visit with content", value: priceVisit, setter: setPriceVisit },
+              { label: "Reel Promotion", desc: "Short-form video content", value: priceReel, setter: setPriceReel },
+              { label: "Story Promotion", desc: "24-hour story feature", value: priceStory, setter: setPriceStory },
+              { label: "Visit & Review", desc: "In-person visit with content", value: priceVisit, setter: setPriceVisit },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card">
-                <span className="text-2xl">{item.emoji}</span>
+
                 <div className="flex-1">
                   <p className="font-medium text-sm">{item.label}</p>
                   <p className="text-xs text-muted-foreground">{item.desc}</p>
@@ -528,33 +552,36 @@ const EditInfluencerProfile = () => {
             onIgFollowersChange={setIgFollowers}
             onYtSubscribersChange={setYtSubscribers}
             onTwitterFollowersChange={setTwitterFollowers}
+            onVerificationCodeChange={setVerificationCode}
             onVerified={() => setIsVerified(true)}
             onVerifiedPlatformsChange={setPlatforms}
+            initialSlug={initialSlug}
+            showGuideInitial={false}
             onUnverified={(platformId) => {
               // Clear verification for specific platform
-              if (platformId === "instagram") {
+              if (platformId === "Instagram") {
                 setIgLastVerified(null);
                 setPlatforms(p => p.filter(x => x !== "Instagram"));
-              } else if (platformId === "youtube") {
+              } else if (platformId === "YouTube") {
                 setYtLastVerified(null);
                 setPlatforms(p => p.filter(x => x !== "YouTube"));
-              } else if (platformId === "twitter") {
+              } else if (platformId === "Twitter") {
                 setTwitterLastVerified(null);
                 setPlatforms(p => p.filter(x => x !== "Twitter"));
               }
             }}
             onStatsFetched={(stats) => {
-              if (stats.platform === "instagram") {
+              if (stats.platform === "Instagram") {
                 if (stats.followers) setIgFollowers(String(stats.followers));
                 setIgLastVerified(new Date().toISOString());
                 if (!platforms.includes("Instagram")) setPlatforms(p => [...p, "Instagram"]);
               }
-              if (stats.platform === "youtube") {
+              if (stats.platform === "YouTube") {
                 if (stats.followers) setYtSubscribers(String(stats.followers));
                 setYtLastVerified(new Date().toISOString());
                 if (!platforms.includes("YouTube")) setPlatforms(p => [...p, "YouTube"]);
               }
-              if (stats.platform === "twitter") {
+              if (stats.platform === "Twitter") {
                 if (stats.followers) setTwitterFollowers(String(stats.followers));
                 setTwitterLastVerified(new Date().toISOString());
                 if (!platforms.includes("Twitter")) setPlatforms(p => [...p, "Twitter"]);
@@ -563,7 +590,11 @@ const EditInfluencerProfile = () => {
           />
         </div>
 
-        <Button className="w-full gradient-primary border-0 text-primary-foreground font-semibold py-6 text-base" onClick={handleSave} disabled={saving}>
+        <Button
+          className="w-full gradient-primary border-0 text-primary-foreground font-semibold py-6 text-base"
+          onClick={handleSave}
+          disabled={saving || name.trim().length < 4 || verificationCode.trim().length < 4}
+        >
           {saving ? <><Loader2 size={18} className="mr-2 animate-spin" /> Saving...</> : <><Save size={18} className="mr-2" /> Save Changes</>}
         </Button>
       </div>

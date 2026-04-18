@@ -6,7 +6,9 @@ import {
   CheckCircle,
   Copy,
   ExternalLink,
+  Info,
   Instagram,
+  Link,
   Loader2,
   MapPin,
   ShieldCheck,
@@ -29,13 +31,17 @@ import { useManagedOptions } from "@/hooks/useManagedOptions";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { LocationPicker } from "@/components/LocationPicker";
+import { SocialVerification } from "./SocialVerification";
 import type { InfluencerFormData } from "@/hooks/useInfluencerRegistration";
+import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
 
 type StepSetter = Dispatch<SetStateAction<number>>;
 type FormValue = string | string[] | number | boolean | null;
 type UpdateFn = (field: keyof InfluencerFormData, value: FormValue) => void;
 type SocialPlatformId = "instagram" | "youtube" | "twitter";
 type SocialUrlKey = "instagramUrl" | "youtubeUrl" | "twitterUrl";
+type SocialFollowerKey = "igFollowers" | "ytFollowers" | "twitterFollowers";
 type PriceField = "priceReel" | "priceStory" | "priceVisit";
 
 const STEPS = [
@@ -53,42 +59,46 @@ const SOCIAL_PLATFORMS: Array<{
   placeholder: string;
   colorClass: string;
   urlKey: SocialUrlKey;
+  followerKey: SocialFollowerKey;
 }> = [
-  {
-    id: "instagram",
-    label: "Instagram",
-    icon: Instagram,
-    placeholder: "@yourhandle or yourhandle",
-    colorClass: "text-pink-500",
-    urlKey: "instagramUrl",
-  },
-  {
-    id: "youtube",
-    label: "YouTube",
-    icon: Youtube,
-    placeholder: "@yourchannel",
-    colorClass: "text-red-500",
-    urlKey: "youtubeUrl",
-  },
-  {
-    id: "twitter",
-    label: "X (Twitter)",
-    icon: Twitter,
-    placeholder: "@yourhandle",
-    colorClass: "text-sky-500",
-    urlKey: "twitterUrl",
-  },
-];
+    {
+      id: "instagram",
+      label: "Instagram",
+      icon: Instagram,
+      placeholder: "Username",
+      colorClass: "text-pink-500",
+      urlKey: "instagramUrl",
+      followerKey: "igFollowers",
+    },
+    {
+      id: "youtube",
+      label: "YouTube",
+      icon: Youtube,
+      placeholder: "Channel Username",
+      colorClass: "text-red-500",
+      urlKey: "youtubeUrl",
+      followerKey: "ytFollowers",
+    },
+    {
+      id: "twitter",
+      label: "X (Twitter)",
+      icon: Twitter,
+      placeholder: "Username",
+      colorClass: "text-sky-500",
+      urlKey: "twitterUrl",
+      followerKey: "twitterFollowers",
+    },
+  ];
 
 const PRICE_FIELDS: Array<{
   key: PriceField;
   label: string;
   description: string;
 }> = [
-  { key: "priceReel", label: "Reel Promotion", description: "Short-form video content" },
-  { key: "priceStory", label: "Story Promotion", description: "24-hour story feature" },
-  { key: "priceVisit", label: "Visit & Review", description: "In-person visit with coverage" },
-];
+    { key: "priceReel", label: "Reel Promotion", description: "Short-form video content" },
+    { key: "priceStory", label: "Story Promotion", description: "24-hour story feature" },
+    { key: "priceVisit", label: "Visit & Review", description: "In-person visit with coverage" },
+  ];
 
 interface InfluencerRegistrationFormProps {
   step: number;
@@ -98,6 +108,8 @@ interface InfluencerRegistrationFormProps {
   update: UpdateFn;
   canProceed: () => boolean;
   handleSubmit: () => void;
+  nextStep: () => Promise<void>;
+  isValidatingSlug: boolean;
 }
 
 const formatPrice = (value: string) => {
@@ -137,13 +149,14 @@ const InfluencerRegistrationForm = ({
   update,
   canProceed,
   handleSubmit,
+  nextStep,
+  isValidatingSlug,
 }: InfluencerRegistrationFormProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { cities, niches } = useManagedOptions();
   const [verifying, setVerifying] = useState<SocialPlatformId | null>(null);
   const [verifiedPlatforms, setVerifiedPlatforms] = useState<Set<SocialPlatformId>>(new Set());
-  const [copied, setCopied] = useState(false);
 
   const initials = useMemo(
     () =>
@@ -157,12 +170,6 @@ const InfluencerRegistrationForm = ({
     [form.name]
   );
 
-  const copyCode = async () => {
-    await navigator.clipboard.writeText(form.verificationCode || "");
-    setCopied(true);
-    toast({ title: "Copied", description: "Paste this code into your social bio before verifying." });
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleVerify = async (platformId: SocialPlatformId) => {
     const config = SOCIAL_PLATFORMS.find((item) => item.id === platformId);
@@ -181,9 +188,9 @@ const InfluencerRegistrationForm = ({
     setVerifying(platformId);
     try {
       const { data, error } = await supabase.functions.invoke("social-service-apify", {
-        body: { 
-          platform: config.id, 
-          url: form[config.urlKey], 
+        body: {
+          platform: config.id,
+          url: form[config.urlKey],
           verificationCode: form.verificationCode,
           action: "verify"
         },
@@ -200,17 +207,22 @@ const InfluencerRegistrationForm = ({
 
       if (data?.verified) {
         setVerifiedPlatforms((prev) => new Set(prev).add(platformId));
-        update("isVerified", true);
-        const verifiedLabel =
-          platformId === "instagram" ? "Instagram" : platformId === "youtube" ? "YouTube" : "Twitter";
+        const verifiedKey = platformId === "instagram" ? "igVerified" : platformId === "youtube" ? "ytVerified" : "twitterVerified";
+        update(verifiedKey, true);
+
+        const verifiedLabel = platformId === "instagram" ? "Instagram" : platformId === "youtube" ? "YouTube" : "Twitter";
         update("platforms", Array.from(new Set([...form.platforms, verifiedLabel])));
-        if (data.stats?.followers) update("followers", data.stats.followers);
+
+        if (data.stats?.followers) {
+          const followerKey = platformId === "instagram" ? "igFollowers" : platformId === "youtube" ? "ytFollowers" : "twitterFollowers";
+          update(followerKey, data.stats.followers.toString());
+        }
 
         toast({ title: "Verified", description: `${config.label} account verified successfully.` });
       } else {
         toast({
           title: "Code not found",
-          description: data?.message || "We could not find the verification code in your profile bio.",
+          description: data?.message || "We could not find the branded link in your profile bio.",
           variant: "destructive",
         });
       }
@@ -229,7 +241,7 @@ const InfluencerRegistrationForm = ({
     switch (step) {
       case 0:
         return (
-          <div className="grid gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+          <div className="grid w-full mx-auto gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
             <div className="hidden space-y-5 lg:block">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-500">Step 1</p>
@@ -246,7 +258,7 @@ const InfluencerRegistrationForm = ({
               </div>
             </div>
 
-            <div className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_60px_-40px_rgba(15,23,42,0.45)] sm:rounded-[32px] sm:p-8">
+            <div className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_18px_60px_-40px_rgba(15,23,42,0.45)] sm:rounded-[32px] sm:p-8">
               <MobileStepIntro
                 step="Step 1"
                 title="Set the first impression"
@@ -264,15 +276,25 @@ const InfluencerRegistrationForm = ({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Full Name
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Full Name
+                  </Label>
+                  {form.name.trim().length > 0 && form.name.trim().length < 4 && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600">
+                      <AlertCircle size={10} /> Min 4 characters required
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="name"
                   value={form.name}
                   onChange={(e) => update("name", e.target.value)}
                   placeholder="e.g. Rahul Sharma"
-                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/60 text-base"
+                  className={cn(
+                    "h-12 rounded-2xl border-slate-200 bg-slate-50/60 text-base transition-all",
+                    form.name.trim().length > 0 && form.name.trim().length < 4 && "border-amber-300 ring-amber-500/10 focus-visible:ring-amber-500"
+                  )}
                   maxLength={100}
                 />
               </div>
@@ -282,7 +304,7 @@ const InfluencerRegistrationForm = ({
 
       case 1:
         return (
-          <div className="grid gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+          <div className="grid w-full mx-auto gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
             <div className="hidden space-y-5 lg:block">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-600">Step 2</p>
@@ -293,7 +315,7 @@ const InfluencerRegistrationForm = ({
               </div>
             </div>
 
-            <div className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_60px_-40px_rgba(15,23,42,0.45)] sm:rounded-[32px] sm:p-8">
+            <div className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_18px_60px_-40px_rgba(15,23,42,0.45)] sm:rounded-[32px] sm:p-8">
               <MobileStepIntro
                 step="Step 2"
                 title="Tell brands what you create"
@@ -347,7 +369,7 @@ const InfluencerRegistrationForm = ({
 
       case 2:
         return (
-          <div className="grid gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+          <div className="grid w-full max-w-full mx-auto gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start overflow-hidden">
             <div className="hidden space-y-5 lg:block">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Step 3</p>
@@ -356,92 +378,70 @@ const InfluencerRegistrationForm = ({
                   Verification is optional, but it helps us pull real stats and makes your profile more trustworthy.
                 </p>
               </div>
-              <div className="rounded-3xl border border-orange-100 bg-orange-50/70 p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">Verification code</p>
-                <div className="mt-3 flex items-center gap-2">
-                  <code className="flex-1 rounded-2xl border border-orange-100 bg-white px-4 py-3 font-mono text-sm font-semibold text-slate-800">
-                    {form.verificationCode}
-                  </code>
-                  <Button type="button" variant="outline" size="icon" className="rounded-2xl" onClick={copyCode}>
-                    {copied ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Paste this code into your social bio, then verify the linked account below.
-                </p>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/30 p-5">
+                <h5 className="mb-2 flex items-center gap-2 text-xs font-bold text-blue-900 uppercase tracking-wider">
+                  <Info className="h-3.5 w-3.5" />
+                  Guide
+                </h5>
+                <ol className="ml-3 list-decimal space-y-2 text-[11px] leading-relaxed text-blue-800 font-medium">
+                  <li>Copy the branded link</li>
+                  <li>Paste it in your social bio</li>
+                  <li>Click verify below</li>
+                </ol>
               </div>
             </div>
 
-            <div className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_60px_-40px_rgba(15,23,42,0.45)] sm:rounded-[32px] sm:p-8">
+            <div className="w-full max-w-full space-y-5 rounded-[28px] border border-slate-200 bg-white p-3 shadow-[0_18px_60px_-40px_rgba(15,23,42,0.45)] sm:rounded-[32px] sm:p-8 overflow-hidden">
               <MobileStepIntro
                 step="Step 3"
                 title="Connect and verify your platforms"
-                description="Add your social media handle and verify it. Only verified accounts will show on your profile."
+                description=""
                 accentClass="text-slate-500"
               />
 
-              <div className="rounded-3xl border border-orange-100 bg-orange-50/70 p-4 lg:hidden">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">Verification code</p>
-                <div className="mt-3 flex items-center gap-2">
-                  <code className="flex-1 rounded-2xl border border-orange-100 bg-white px-4 py-3 font-mono text-sm font-semibold text-slate-800">
-                    {form.verificationCode}
-                  </code>
-                  <Button type="button" variant="outline" size="icon" className="rounded-2xl" onClick={copyCode}>
-                    {copied ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {SOCIAL_PLATFORMS.map((platform) => {
-                  const Icon = platform.icon;
-                  const value = form[platform.urlKey] || "";
-                  const isVerified = verifiedPlatforms.has(platform.id);
-
-                  return (
-                    <div key={platform.id} className="space-y-2">
-                      <Label className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        <span className="flex items-center gap-2">
-                          <Icon className={`h-4 w-4 ${platform.colorClass}`} />
-                          {platform.label}
-                        </span>
-                        {isVerified && <Badge className="border-none bg-teal-50 text-teal-700">Verified</Badge>}
-                      </Label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={value}
-                          onChange={(e) => update(platform.urlKey, e.target.value)}
-                          placeholder={platform.placeholder}
-                          className="h-12 rounded-2xl border-slate-200 bg-slate-50/60"
-                          disabled={isVerified}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-12 rounded-2xl px-3 sm:px-4"
-                          onClick={() => handleVerify(platform.id)}
-                          disabled={!value.trim() || verifying !== null || isVerified}
-                        >
-                          {verifying === platform.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : isVerified ? (
-                            <CheckCircle className="h-4 w-4 text-emerald-500" />
-                          ) : (
-                            <ExternalLink className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <SocialVerification
+                verificationCode={form.slug || ""}
+                isVerified={form.igVerified || form.ytVerified || form.twitterVerified}
+                verifiedPlatforms={[
+                  form.igVerified ? "Instagram" : null,
+                  form.ytVerified ? "YouTube" : null,
+                  form.twitterVerified ? "Twitter" : null,
+                ].filter(Boolean) as string[]}
+                instagramUrl={form.instagramUrl}
+                youtubeUrl={form.youtubeUrl}
+                twitterUrl={form.twitterUrl}
+                onInstagramChange={(v) => update("instagramUrl", v)}
+                onYoutubeChange={(v) => update("youtubeUrl", v)}
+                onTwitterChange={(v) => update("twitterUrl", v)}
+                igFollowers={form.igFollowers}
+                ytSubscribers={form.ytFollowers}
+                twitterFollowers={form.twitterFollowers}
+                onIgFollowersChange={(v) => update("igFollowers", v)}
+                onYtSubscribersChange={(v) => update("ytFollowers", v)}
+                onTwitterFollowersChange={(v) => update("twitterFollowers", v)}
+                onVerified={() => { }}
+                onVerifiedPlatformsChange={(platforms) => {
+                  update("igVerified", platforms.includes("Instagram"));
+                  update("ytVerified", platforms.includes("YouTube"));
+                  update("twitterVerified", platforms.includes("Twitter"));
+                  update("platforms", platforms);
+                }}
+                onVerificationCodeChange={(v) => update("slug", v)}
+                onStatsFetched={(stats) => {
+                  if (stats.platform === "Instagram" && stats.followers) update("igFollowers", stats.followers);
+                  if (stats.platform === "YouTube" && stats.followers) update("ytFollowers", stats.followers);
+                  if (stats.platform === "Twitter" && stats.followers) update("twitterFollowers", stats.followers);
+                }}
+                showGuideInitial={false} // Guide is already in the sidebar/intro
+              />
             </div>
           </div>
         );
 
       case 3:
         return (
-          <div className="grid gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+          <div className="grid w-full mx-auto gap-4 lg:gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
             <div className="hidden space-y-5 lg:block">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-500">Step 4</p>
@@ -537,8 +537,12 @@ const InfluencerRegistrationForm = ({
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Followers</p>
-                      <p className="mt-2 text-xl font-semibold text-slate-950">{form.followers || "0"}</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Total Reach</p>
+                      <p className="mt-2 text-xl font-semibold text-slate-950">
+                        {((Number.parseInt(form.igFollowers, 10) || 0) +
+                          (Number.parseInt(form.ytFollowers, 10) || 0) +
+                          (Number.parseInt(form.twitterFollowers, 10) || 0)).toLocaleString()}
+                      </p>
                     </div>
 
                     <div className="rounded-2xl bg-slate-50 p-4">
@@ -608,13 +612,12 @@ const InfluencerRegistrationForm = ({
             <div key={item.label} className="flex items-center gap-2">
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm">
                 <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-full ${
-                    complete
-                      ? "bg-orange-500 text-white"
-                      : active
-                        ? "bg-slate-950 text-white"
-                        : "bg-slate-100 text-slate-500"
-                  }`}
+                  className={`flex h-9 w-9 items-center justify-center rounded-full ${complete
+                    ? "bg-orange-500 text-white"
+                    : active
+                      ? "bg-slate-950 text-white"
+                      : "bg-slate-100 text-slate-500"
+                    }`}
                 >
                   {complete ? <CheckCircle className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                 </div>
@@ -664,12 +667,21 @@ const InfluencerRegistrationForm = ({
         {step < STEPS.length - 1 ? (
           <Button
             type="button"
-            onClick={() => setStep((current) => current + 1)}
-            disabled={!canProceed()}
+            onClick={nextStep}
+            disabled={!canProceed() || isValidatingSlug}
             className="h-10 rounded-2xl bg-orange-500 px-4 text-white hover:bg-orange-600 sm:h-11 sm:px-6"
           >
-            Continue
-            <ArrowRight className="ml-2 h-4 w-4" />
+            {isValidatingSlug ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Checking...
+              </>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
           </Button>
         ) : (
           <Button

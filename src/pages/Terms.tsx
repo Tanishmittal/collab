@@ -68,7 +68,7 @@ const Terms = () => {
               Influgal relies on transparency and authenticity. By using our platform:
             </p>
             <ul className="list-disc pl-6 space-y-2">
-              <li>Influencers agree to provide accurate social media metrics via our verification code sync.</li>
+              <li>Influencers agree to provide accurate social media metrics via our branded link sync.</li>
               <li>Brands agree to provide accurate campaign details and budget expectations.</li>
               <li>Users must not engage in fraudulent behavior, spam, or harassment.</li>
             </ul>
