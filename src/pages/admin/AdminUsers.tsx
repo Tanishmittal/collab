@@ -18,8 +18,17 @@ import {
   Link as LinkIcon,
   Check,
   X,
-  Mail
+  Mail,
+  Filter,
+  ChevronDown,
+  RotateCcw,
+  UserPlus,
+  Users as UsersIcon,
+  TrendingUp,
+  AlertCircle,
+  Clock
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -43,6 +52,24 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 type UserType = 'influencer' | 'brand';
 
@@ -59,6 +86,15 @@ export default function AdminUsers() {
   const [isReasonDialogOpen, setIsReasonDialogOpen] = useState(false);
   const [moderationReason, setModerationReason] = useState('');
   const [pendingBulkAction, setPendingBulkAction] = useState<'hide' | 'unhide' | null>(null);
+  
+  // Advanced Filters State
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'hidden'>('all');
+  const [filterVerified, setFilterVerified] = useState<'all' | 'verified' | 'unverified'>('all');
+  const [filterFollowers, setFilterFollowers] = useState<'all' | 'small' | 'medium' | 'large'>('all');
+  const [filterQuality, setFilterQuality] = useState<string[]>([]);
+  const [qualityInvert, setQualityInvert] = useState(true);
+  
   const { toast } = useToast();
 
   const fetchUsers = async () => {
@@ -69,7 +105,7 @@ export default function AdminUsers() {
       
       const { data, error } = await supabase
         .from(table)
-        .select('*')
+        .select(activeTab === 'influencer' ? '*, portfolio_items(count)' : '*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -79,6 +115,12 @@ export default function AdminUsers() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+    return num.toString();
   };
 
   useEffect(() => {
@@ -207,11 +249,72 @@ export default function AdminUsers() {
     setEditForm((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  const filteredUsers = users.filter(item => {
-    return (item.name || item.business_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-           (item.city || item.location || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-           (item.niche || item.industry || '').toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const filteredUsers = React.useMemo(() => {
+    return users.filter(item => {
+      // 1. Search Term Logic
+      const searchStr = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm || 
+             (item.name || item.business_name || '').toLowerCase().includes(searchStr) ||
+             (item.city || item.location || '').toLowerCase().includes(searchStr) ||
+             (item.niche || item.industry || '').toLowerCase().includes(searchStr);
+             
+      if (!matchesSearch) return false;
+
+      // Only apply additional filters for influencers as per user request
+      if (activeTab === 'brand') return true;
+
+      // 2. Status Filter
+      if (filterStatus === 'active' && !item.is_active) return false;
+      if (filterStatus === 'hidden' && item.is_active) return false;
+
+      // 3. Verification Filter
+      if (filterVerified === 'verified' && !item.is_verified) return false;
+      if (filterVerified === 'unverified' && item.is_verified) return false;
+
+      // 4. Followers Filter
+      const followers = Number(item.total_followers_count || 0);
+      if (filterFollowers === 'small' && followers >= 10000) return false;
+      if (filterFollowers === 'medium' && (followers < 10000 || followers > 50000)) return false;
+      if (filterFollowers === 'large' && followers <= 50000) return false;
+
+      // 5. New: Advanced Profile Quality Filters (Smart Logic)
+      if (filterQuality.length > 0) {
+        const checkProblem = (id: string) => {
+          switch (id) {
+            case 'missing-bio': return !(item.bio?.trim());
+            case 'missing-socials': return !(item.instagram_url || item.youtube_url || item.twitter_url);
+            case 'missing-avatar': return !item.avatar_url;
+            case 'missing-pricing': return !(item.price_reel > 0 || item.price_story > 0 || item.price_visit > 0);
+            case 'no-username': return !item.verification_code;
+            case 'minimal-bio': return (item.bio?.length || 0) < 20;
+            case 'no-portfolio': return (item.portfolio_items?.[0]?.count || 0) === 0;
+            default: return false;
+          }
+        };
+
+        if (qualityInvert) {
+          // Moderation mode: Show if ANY of the selected problems are present (OR logic)
+          const hasAnyProblem = filterQuality.some(id => checkProblem(id));
+          if (!hasAnyProblem) return false;
+        } else {
+          // Discovery mode: Show ONLY if ALL of the selected quality traits are present (AND logic)
+          const hasAllQuality = filterQuality.every(id => !checkProblem(id));
+          if (!hasAllQuality) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [users, searchTerm, activeTab, filterStatus, filterVerified, filterFollowers, filterQuality, qualityInvert]);
+
+  const resetFilters = () => {
+    setFilterStatus('all');
+    setFilterVerified('all');
+    setFilterFollowers('all');
+    setFilterQuality([]);
+  };
+
+  const hasActiveFilters = filterStatus !== 'all' || filterVerified !== 'all' || filterFollowers !== 'all' || filterQuality.length > 0;
 
   return (
     <div className="space-y-6">
@@ -251,18 +354,202 @@ export default function AdminUsers() {
               {selectedIds.length > 0 ? `${selectedIds.length} Selected` : 'Select All'}
             </Label>
           </div>
+          <div className="hidden md:flex items-center gap-2 text-xs font-medium text-slate-400">
+            <span>Showing <span className="text-slate-700 font-bold">{filteredUsers.length}</span> {activeTab === 'influencer' ? 'influencers' : 'brands'}</span>
+            {hasActiveFilters && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={resetFilters}
+                className="h-7 px-3 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-full font-bold uppercase tracking-wider transition-all"
+              >
+                Clear All
+              </Button>
+            )}
+          </div>
 
           <div className="relative flex-1 md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
               placeholder={`Search by name, city, or niche...`}
-              className="pl-10 h-10 border-slate-200"
+              className="pl-10 h-10 border-slate-200 focus-visible:ring-blue-500"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+
+          <Button 
+            variant={isFiltersOpen || hasActiveFilters ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+            className={cn(
+              "h-10 gap-2 border-slate-200",
+              (isFiltersOpen || hasActiveFilters) && "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm"
+            )}
+            disabled={activeTab === 'brand'}
+          >
+            <Filter className="h-4 w-4" />
+            <span>Filters</span>
+            {hasActiveFilters && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 bg-white/20 text-white border-none min-w-5 justify-center">
+                { (filterStatus !== 'all' ? 1 : 0) + (filterVerified !== 'all' ? 1 : 0) + (filterFollowers !== 'all' ? 1 : 0) + filterQuality.length }
+              </Badge>
+            )}
+            <ChevronDown className={cn("h-4 w-4 transition-transform", isFiltersOpen && "rotate-180")} />
+          </Button>
         </div>
       </div>
+
+      {/* Advanced Filters Collapsible */}
+      <Collapsible open={isFiltersOpen && activeTab === 'influencer'} onOpenChange={setIsFiltersOpen}>
+        <CollapsibleContent className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center justify-between px-2 mt-2">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
+              <Filter className="h-3.5 w-3.5 text-blue-600" />
+              Advanced Filters
+            </h3>
+            {hasActiveFilters && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={resetFilters} 
+                className="h-8 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50 font-bold gap-2 uppercase tracking-wider transition-all"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset Filters
+              </Button>
+            )}
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Status Filter */}
+            <div className="space-y-3">
+              <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Visibility Status</Label>
+              <div className="flex flex-col gap-2">
+                {['all', 'active', 'hidden'].map((s) => (
+                  <div key={s} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`status-${s}`} 
+                      checked={filterStatus === s}
+                      onCheckedChange={() => setFilterStatus(s as any)}
+                    />
+                    <Label htmlFor={`status-${s}`} className="text-sm cursor-pointer capitalize">{s}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Verification Filter */}
+            <div className="space-y-3">
+              <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Verification Status</Label>
+              <div className="flex flex-col gap-2">
+                {['all', 'verified', 'unverified'].map((v) => (
+                  <div key={v} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`verified-${v}`} 
+                      checked={filterVerified === v}
+                      onCheckedChange={() => setFilterVerified(v as any)}
+                    />
+                    <Label htmlFor={`verified-${v}`} className="text-sm cursor-pointer capitalize">{v}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Reach Filter */}
+            <div className="space-y-3">
+              <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Reach Level</Label>
+              <div className="flex flex-col gap-2">
+                {[
+                  { id: 'all', label: 'All Sizes' },
+                  { id: 'small', label: 'Small (<10k)' },
+                  { id: 'medium', label: 'Medium (10k-50k)' },
+                  { id: 'large', label: 'Large (>50k)' }
+                ].map((r) => (
+                  <div key={r.id} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`followers-${r.id}`} 
+                      checked={filterFollowers === r.id}
+                      onCheckedChange={() => setFilterFollowers(r.id as any)}
+                    />
+                    <Label htmlFor={`followers-${r.id}`} className="text-sm cursor-pointer">{r.label}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Profile Quality Filter */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Profile Quality</Label>
+                <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
+                  <span className={cn("text-[10px] font-bold transition-colors", qualityInvert ? "text-slate-400" : "text-emerald-600")}>PRESENT</span>
+                  <Switch 
+                    checked={qualityInvert} 
+                    onCheckedChange={setQualityInvert}
+                    className="data-[state=checked]:bg-blue-600 h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
+                  />
+                  <span className={cn("text-[10px] font-bold transition-colors", qualityInvert ? "text-blue-600" : "text-slate-400")}>MISSING</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-2">
+                {[
+                  { id: 'missing-bio', label: qualityInvert ? 'Missing Bio' : 'Has Bio' },
+                  { id: 'missing-socials', label: qualityInvert ? 'Missing Social Links' : 'Has Social Links' },
+                  { id: 'missing-avatar', label: qualityInvert ? 'Missing Avatar' : 'Has Avatar' },
+                  { id: 'missing-pricing', label: qualityInvert ? 'Missing Pricing' : 'Has Pricing Set' },
+                  { id: 'no-username', label: qualityInvert ? 'No Branded Username' : 'Has Branded Username' },
+                  { id: 'minimal-bio', label: qualityInvert ? 'Minimal Bio (<20)' : 'Deep Bio (20+)' },
+                  { id: 'no-portfolio', label: qualityInvert ? 'No Portfolio' : 'Has Portfolio' }
+                ].map((q) => (
+                  <div key={q.id} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`quality-${q.id}`} 
+                      checked={filterQuality.includes(q.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) setFilterQuality(prev => [...prev, q.id]);
+                        else setFilterQuality(prev => prev.filter(i => i !== q.id));
+                      }}
+                    />
+                    <Label htmlFor={`quality-${q.id}`} className="text-sm cursor-pointer">{q.label}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* Active Filter Badges */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 pt-1 pb-2">
+              <span className="text-[10px] font-bold uppercase text-slate-400 mr-2">Active Filters:</span>
+              {filterStatus !== 'all' && (
+                <Badge variant="outline" className="gap-1 px-2 py-1 bg-blue-50 border-blue-200 text-blue-700 font-medium">
+                  Status: {filterStatus}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterStatus('all')} />
+                </Badge>
+              )}
+              {filterVerified !== 'all' && (
+                <Badge variant="outline" className="gap-1 px-2 py-1 bg-blue-50 border-blue-200 text-blue-700 font-medium">
+                  {filterVerified}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterVerified('all')} />
+                </Badge>
+              )}
+              {filterFollowers !== 'all' && (
+                <Badge variant="outline" className="gap-1 px-2 py-1 bg-blue-50 border-blue-200 text-blue-700 font-medium">
+                  Reach: {filterFollowers}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterFollowers('all')} />
+                </Badge>
+              )}
+              {filterQuality.map(q => (
+                <Badge key={q} variant="outline" className="gap-1 px-2 py-1 bg-blue-50 border-blue-200 text-blue-700 font-medium">
+                  {q.replace('-', ' ')}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterQuality(prev => prev.filter(i => i !== q))} />
+                </Badge>
+              ))}
+            </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Bulk Action Bar */}
       {selectedIds.length > 0 && (
@@ -362,7 +649,6 @@ export default function AdminUsers() {
               )}
               onClick={() => handleEdit(user)}
             >
-              {/* Checkbox Overlay */}
               <div 
                 className="absolute top-4 left-4 z-10"
                 onClick={(e) => e.stopPropagation()}
@@ -374,53 +660,131 @@ export default function AdminUsers() {
                 />
               </div>
 
-              <div className="flex items-center gap-4 flex-1 pl-8">
-                <div className="h-14 w-14 rounded-full bg-slate-100 border border-slate-200 overflow-hidden relative">
+              <div className="flex items-start gap-5 flex-1 pl-8">
+                <div className="h-20 w-20 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden relative shadow-inner shrink-0 mt-1">
                   {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+                    <img src={user.avatar_url} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center text-slate-400 font-bold text-xl uppercase">
+                    <div className="h-full w-full flex items-center justify-center text-slate-400 font-bold text-2xl uppercase">
                       {(user.name || user.business_name || '?')[0]}
                     </div>
                   )}
                   {!user.is_active && (
-                    <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
-                      <EyeOff className="text-red-600 h-5 w-5" />
+                    <div className="absolute inset-0 bg-red-500/10 backdrop-blur-[1px] flex items-center justify-center">
+                      <EyeOff className="text-red-600 h-6 w-6 opacity-80" />
                     </div>
                   )}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-slate-800">{user.name || user.business_name}</h4>
-                    {user.is_verified && <CheckCircle className="h-4 w-4 text-blue-500" fill="currentColor" />}
+
+                <div className="flex-1 min-w-0 py-1">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5">
+                    <h4 className="font-bold text-lg text-slate-800 tracking-tight truncate max-w-[200px]">
+                      {user.name || user.business_name}
+                    </h4>
+                    {user.is_verified && (
+                      <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" fill="currentColor" />
+                    )}
+                    {user.created_at && (
+                      <div className="flex items-center gap-1 text-[10px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100 uppercase tracking-wider font-bold">
+                        <Clock className="h-2.5 w-2.5" />
+                        Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+                      </div>
+                    )}
+                    {!user.is_active && (
+                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-100 text-[10px] uppercase h-5 font-bold">
+                        Hidden
+                      </Badge>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-slate-500 text-xs">
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-500 text-xs mb-3">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
                       <span>{user.city || 'Global'}</span>
                     </div>
-                    <span>•</span>
-                    <span className="capitalize">{user.niche || 'General'}</span>
+                    <span className="text-slate-300">•</span>
+                    <div className="flex items-center gap-1.5 font-medium capitalize">
+                      <UsersIcon className="h-3.5 w-3.5 text-slate-400" />
+                      <span>{user.niche || 'General'}</span>
+                    </div>
                     {user.email && (
                       <>
-                        <span>•</span>
-                        <div className="flex items-center gap-1 truncate max-w-[150px]">
-                          <Mail className="h-3 w-3" />
-                          <span className="truncate">{user.email}</span>
+                        <span className="text-slate-300">•</span>
+                        <div className="flex items-center gap-1.5 group/email">
+                          <Mail className="h-3.5 w-3.5 text-slate-400 group-hover/email:text-blue-500 active:scale-95 transition-all" />
+                          <span className="truncate max-w-[200px] text-slate-600 font-medium">{user.email}</span>
                         </div>
                       </>
                     )}
                   </div>
+
+                  {activeTab === 'influencer' && (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2 bg-blue-50/50 px-3 py-1.5 rounded-xl border border-blue-100/50 shadow-sm">
+                        <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
+                        <span className="text-xs font-bold text-blue-700">
+                          {formatNumber(user.total_followers_count || 0)} <span className="text-blue-500/80 font-medium">Reach</span>
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5">
+                        {user.instagram_url && (
+                          <div className="h-7 w-7 rounded-lg bg-pink-50 flex items-center justify-center border border-pink-100 text-pink-600 shrink-0">
+                            <Instagram className="h-4 w-4" />
+                          </div>
+                        )}
+                        {user.youtube_url && (
+                          <div className="h-7 w-7 rounded-lg bg-red-50 flex items-center justify-center border border-red-100 text-red-600 shrink-0">
+                            <Youtube className="h-4 w-4" />
+                          </div>
+                        )}
+                        {user.twitter_url && (
+                          <div className="h-7 w-7 rounded-lg bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-500 shrink-0">
+                            <Twitter className="h-4 w-4" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {!user.bio && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100 uppercase tracking-tighter shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                            <AlertCircle className="h-2.5 w-2.5" />
+                            No Bio
+                          </div>
+                        )}
+                        {!user.avatar_url && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100 uppercase tracking-tighter shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                            <AlertCircle className="h-2.5 w-2.5" />
+                            No Avatar
+                          </div>
+                        )}
+                        {activeTab === 'influencer' && !user.instagram_url && !user.youtube_url && !user.twitter_url && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 uppercase tracking-tighter shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                            <AlertCircle className="h-2.5 w-2.5" />
+                            No Socials
+                          </div>
+                        )}
+                        {activeTab === 'influencer' && (user.portfolio_items?.[0]?.count || 0) === 0 && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 uppercase tracking-tighter shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                            <AlertCircle className="h-2.5 w-2.5" />
+                            No Portfolio
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "gap-2 border-slate-200",
-                    user.is_active ? "text-slate-600" : "text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100"
+                    "gap-2 border-slate-200 h-9 px-4 font-semibold shadow-sm transition-all active:scale-95",
+                    user.is_active 
+                      ? "text-slate-600 hover:bg-slate-50 hover:border-slate-300" 
+                      : "text-emerald-600 border-emerald-100 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-200"
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -444,24 +808,25 @@ export default function AdminUsers() {
                   ) : (
                     <>
                       <Eye className="h-4 w-4" />
-                      <span>Unhide</span>
+                        <span>Show</span>
                     </>
                   )}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if(confirm('Are you sure you want to permanently delete this user? This cannot be undone.')) {
-                        // Hard delete logic could go here if needed, but we prefer hide as per plan.
-                        toast({ title: 'Danger Zone', description: 'Hard deletion is restricted to database level for safety.', variant: 'destructive' });
-                     }
-                  }}
-                >
-                  <XCircle className="h-5 w-5" />
-                </Button>
+                <div className="flex sm:flex-col gap-1 items-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if(confirm('Are you sure you want to permanently delete this user? This cannot be undone.')) {
+                          toast({ title: 'Danger Zone', description: 'Hard deletion is restricted for safety. Use Hide instead.', variant: 'destructive' });
+                      }
+                    }}
+                  >
+                    <XCircle className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -469,246 +834,338 @@ export default function AdminUsers() {
       )}
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="sm:max-w-xl flex flex-col h-full p-0">
-          <div className="flex-1 overflow-y-auto p-6 pb-12">
-            <SheetHeader className="mb-6">
-              <SheetTitle className="flex items-center gap-2">
-                Moderating {activeTab === 'influencer' ? editForm?.name : editForm?.business_name}
-                {editForm?.is_verified && <CheckCircle className="h-4 w-4 text-blue-500" fill="currentColor" />}
-              </SheetTitle>
-              <SheetDescription>
-                Update profile information directly to fix completeness or moderation issues.
-              </SheetDescription>
-            </SheetHeader>
+        <SheetContent className="w-full sm:max-w-[500px] overflow-y-auto bg-slate-50 p-0">
+          <SheetHeader className="p-6 pb-6 border-b border-slate-200 bg-white">
+            <SheetTitle className="text-xl font-bold flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-blue-600" />
+              Moderating {editForm?.name || editForm?.business_name}
+              {editForm?.is_verified && <CheckCircle className="h-4 w-4 text-blue-500" />}
+            </SheetTitle>
+            <SheetDescription className="text-slate-500">
+              Update profile information directly to fix completeness or moderation issues.
+            </SheetDescription>
+          </SheetHeader>
 
-            {editForm && (
-              <div className="space-y-6">
-                {/* Profile Image Preview */}
-                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
-                  <div className="h-20 w-20 rounded-full bg-slate-200 overflow-hidden border-2 border-white shadow-sm">
-                    <img src={editForm.avatar_url || editForm.logo_url} alt="" className="h-full w-full object-cover" />
+          {editForm && (
+            <div className="p-6 space-y-8">
+              {/* Profile Header Card */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div className="relative">
+                  <img 
+                    src={editForm.avatar_url || editForm.logo_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'} 
+                    alt="Avatar" 
+                    className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md"
+                  />
+                  <div className={cn(
+                    "absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center shadow-sm",
+                    editForm.is_active ? "bg-green-500" : "bg-red-500"
+                  )}>
+                    {editForm.is_active ? <Check className="h-3 w-3 text-white" /> : <X className="h-3 w-3 text-white" />}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-lg">{editForm.name || editForm.business_name}</h3>
-                    {editForm.email && (
-                      <div className="flex items-center gap-2 text-sm text-slate-500">
-                        <p>{editForm.city || 'No city set'}</p>
-                        <span>•</span>
-                        <div className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          <p>{editForm.email}</p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-slate-900 truncate">{editForm.name || editForm.business_name}</h4>
+                  <div className="flex flex-col gap-1 mt-1">
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5 truncate">
+                      <MapPin className="h-3 w-3" /> {editForm.city}
+                    </p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5 truncate">
+                      <Mail className="h-3 w-3" /> {editForm.email}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Tabs defaultValue="identity" className="w-full">
+                <TabsList className="w-full grid grid-cols-3 bg-slate-100 p-1 mb-6">
+                  <TabsTrigger value="identity" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase tracking-wider">Identity</TabsTrigger>
+                  <TabsTrigger value="commercial" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase tracking-wider">Stats</TabsTrigger>
+                  <TabsTrigger value="moderation" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase tracking-wider">Safety</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="identity" className="space-y-6 focus-visible:outline-none">
+                  {/* Status Switches */}
+                  <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-slate-200">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Visibility</Label>
+                      <div className="flex items-center gap-2 h-10 px-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <Switch 
+                          checked={editForm.is_active} 
+                          onCheckedChange={(checked) => updateFormField('is_active', checked)}
+                        />
+                        <span className="text-xs font-bold text-slate-700">{editForm.is_active ? 'VISIBLE' : 'HIDDEN'}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Verification</Label>
+                      <div className="flex items-center gap-2 h-10 px-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <Switch 
+                          checked={editForm.is_verified} 
+                          onCheckedChange={(checked) => updateFormField('is_verified', checked)}
+                        />
+                        <span className="text-xs font-bold text-slate-700">{editForm.is_verified ? 'VERIFIED' : 'PENDING'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2 text-left">
+                      <Label className="text-xs font-bold text-slate-500 uppercase">Profile Name / Title</Label>
+                      <Input 
+                        value={editForm.name || editForm.business_name || ''} 
+                        onChange={(e) => updateFormField(activeTab === 'influencer' ? 'name' : 'business_name', e.target.value)}
+                        className="bg-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase">City</Label>
+                        <Input 
+                          value={editForm.city || ''} 
+                          onChange={(e) => updateFormField('city', e.target.value)}
+                          className="bg-white"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase">{activeTab === 'influencer' ? 'Niche' : 'Industry'}</Label>
+                        <Input 
+                          value={editForm.niche || editForm.industry || ''} 
+                          onChange={(e) => updateFormField(activeTab === 'influencer' ? 'niche' : 'industry', e.target.value)}
+                          className="bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-slate-500 uppercase">Biography / Description</Label>
+                      <Textarea 
+                        value={editForm.bio || editForm.description || ''} 
+                        onChange={(e) => updateFormField(activeTab === 'influencer' ? 'bio' : 'description', e.target.value)}
+                        className="min-h-[120px] bg-white"
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="commercial" className="space-y-6 focus-visible:outline-none">
+                  {activeTab === 'influencer' ? (
+                    <>
+                      {/* Platform stats breakdown */}
+                      <div className="space-y-4">
+                         <Label className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                           <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
+                           Social Reach Breakdown
+                         </Label>
+                         <div className="grid grid-cols-1 gap-3">
+                           {[
+                             { label: 'Instagram', field: 'ig_followers', engagementField: 'ig_engagement', dateField: 'ig_last_verified', icon: Instagram },
+                             { label: 'YouTube', field: 'yt_subscribers', engagementField: 'yt_engagement', dateField: 'yt_last_verified', icon: Youtube },
+                             { label: 'Twitter / X', field: 'twitter_followers', engagementField: 'twitter_engagement', dateField: 'twitter_last_verified', icon: Twitter },
+                           ].map((plat) => (
+                             <div key={plat.label} className="bg-white p-4 rounded-xl border border-slate-200">
+                               <div className="flex items-center justify-between mb-3">
+                                 <span className="text-xs font-bold flex items-center gap-2">
+                                   <plat.icon className="h-3.5 w-3.5 text-slate-400" />
+                                   {plat.label}
+                                 </span>
+                                 {editForm[plat.dateField] && (
+                                   <Badge variant="secondary" className="text-[9px] font-bold px-1.5 h-4 bg-slate-100 text-slate-500 border-none">
+                                     LAST SYNC: {formatDistanceToNow(new Date(editForm[plat.dateField]))} AGO
+                                   </Badge>
+                                 )}
+                               </div>
+                               <div className="grid grid-cols-2 gap-4">
+                                 <div>
+                                   <Label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Followers</Label>
+                                   <Input 
+                                     type="number"
+                                     value={editForm[plat.field] || 0}
+                                     onChange={(e) => updateFormField(plat.field, parseInt(e.target.value))}
+                                     className="h-8 text-sm font-bold"
+                                   />
+                                 </div>
+                                 <div>
+                                    <Label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Engagement %</Label>
+                                    <Input 
+                                      type="number"
+                                      step="0.1"
+                                      value={editForm[plat.engagementField] || 0}
+                                      onChange={(e) => updateFormField(plat.engagementField, parseFloat(e.target.value))}
+                                      className="h-8 text-sm font-bold"
+                                    />
+                                 </div>
+                               </div>
+                             </div>
+                           ))}
+                         </div>
+                      </div>
+
+                      {/* Pricing */}
+                      <div className="space-y-4 pt-4 border-t">
+                        <Label className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                          <Save className="h-3.5 w-3.5 text-blue-600" />
+                          Service Rates (INR)
+                        </Label>
+                        <div className="grid grid-cols-3 gap-3">
+                           {[
+                             { label: 'Reel', field: 'price_reel' },
+                             { label: 'Story', field: 'price_story' },
+                             { label: 'Visit', field: 'price_visit' },
+                           ].map((price) => (
+                             <div key={price.label} className="space-y-1.5 bg-white p-3 rounded-xl border border-slate-100">
+                               <Label className="text-[10px] font-bold text-slate-400 uppercase">{price.label}</Label>
+                               <div className="relative">
+                                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 font-mono">₹</span>
+                                 <Input 
+                                   type="number"
+                                   value={editForm[price.field] || 0}
+                                   onChange={(e) => updateFormField(price.field, parseInt(e.target.value))}
+                                   className="h-8 pl-5 text-xs font-bold border-none bg-slate-50"
+                                 />
+                               </div>
+                             </div>
+                           ))}
                         </div>
                       </div>
-                    )}
-                    {!editForm.email && <p className="text-sm text-slate-500">{editForm.city || 'No city set'}</p>}
-                    {!editForm.avatar_url && !editForm.logo_url && (
-                      <Badge variant="destructive" className="mt-1">Missing Avatar</Badge>
-                    )}
-                  </div>
-                </div>
-
-              {/* Status & Verification */}
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="flex items-center space-x-2 border rounded-lg p-3 bg-white">
-                   <input 
-                     type="checkbox"
-                     id="is_verified"
-                     checked={editForm.is_verified || false}
-                     onChange={(e) => updateFormField('is_verified', e.target.checked)}
-                     className="h-4 w-4 text-blue-600 rounded"
-                   />
-                   <Label htmlFor="is_verified" className="cursor-pointer">Verified Account</Label>
-                </div>
-                <div className="flex items-center space-x-2 border rounded-lg p-3 bg-white">
-                   <input 
-                     type="checkbox"
-                     id="is_active"
-                     checked={editForm.is_active || false}
-                     onChange={(e) => updateFormField('is_active', e.target.checked)}
-                     className="h-4 w-4 text-blue-600 rounded"
-                   />
-                   <Label htmlFor="is_active" className="cursor-pointer">Active / Visible</Label>
-                </div>
-              </div>
-
-              {/* Basic Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Name / Business Name</Label>
-                  <Input 
-                    value={editForm.name || editForm.business_name || ''} 
-                    onChange={(e) => updateFormField(activeTab === 'influencer' ? 'name' : 'business_name', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>City</Label>
-                  <Input 
-                    value={editForm.city || ''} 
-                    onChange={(e) => updateFormField('city', e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Niche / Industry */}
-              <div className="space-y-2">
-                <Label>{activeTab === 'influencer' ? 'Niche' : 'Industry'}</Label>
-                <Input 
-                  value={editForm.niche || editForm.industry || ''} 
-                  onChange={(e) => updateFormField(activeTab === 'influencer' ? 'niche' : 'industry', e.target.value)}
-                />
-              </div>
-
-              {/* Bio / Description */}
-              <div className="space-y-2">
-                <Label>Bio / Description</Label>
-                <Textarea 
-                  rows={4}
-                  value={editForm.bio || editForm.description || ''} 
-                  onChange={(e) => updateFormField(activeTab === 'influencer' ? 'bio' : 'description', e.target.value)}
-                  className={!editForm.bio && !editForm.description ? "border-red-200 bg-red-50/20" : ""}
-                />
-                {(!editForm.bio && !editForm.description) && (
-                  <p className="text-[10px] text-red-500 font-medium italic">Empty profiles are less likely to be chosen by partners.</p>
-                )}
-              </div>
-
-              {/* Stats & Socials - Influencer Specific */}
-              {activeTab === 'influencer' && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Total Follower Count (Manual + Verified)</Label>
-                      <Input 
-                        type="number"
-                        value={editForm.total_followers_count || 0} 
-                        onChange={(e) => updateFormField('total_followers_count', Number(e.target.value))}
-                      />
+                    </>
+                  ) : (
+                    <div className="space-y-6">
+                       {/* Brand Commercials */}
+                       <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-5">
+                          <div className="space-y-2">
+                             <Label className="text-xs font-bold text-slate-500 uppercase">Monthly Ad Budget</Label>
+                             <Input 
+                               value={editForm.monthly_budget || ''} 
+                               onChange={(e) => updateFormField('monthly_budget', e.target.value)}
+                               className="font-bold"
+                             />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                               <Label className="text-xs font-bold text-slate-500 uppercase">Campaigns / Month</Label>
+                               <Input 
+                                 type="number"
+                                 value={editForm.campaigns_per_month || 0} 
+                                 onChange={(e) => updateFormField('campaigns_per_month', parseInt(e.target.value))}
+                                 className="font-bold"
+                               />
+                            </div>
+                            <div className="space-y-2">
+                               <Label className="text-xs font-bold text-slate-500 uppercase">Fast Responses</Label>
+                               <Input 
+                                 value={editForm.response_time_expectation || ''} 
+                                 onChange={(e) => updateFormField('response_time_expectation', e.target.value)}
+                                 className="font-bold text-blue-600"
+                               />
+                            </div>
+                          </div>
+                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Verified Follower Count (System Only)</Label>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="moderation" className="space-y-6 focus-visible:outline-none">
+                  {/* Warning Box */}
+                  <div className="bg-orange-50 p-5 rounded-xl border border-orange-100 space-y-4">
+                    <div className="flex items-center gap-2 text-orange-800">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-xs font-bold uppercase tracking-widest">Internal Moderation Reason</span>
+                    </div>
+                    <Textarea 
+                      value={editForm.moderation_message || ''} 
+                      onChange={(e) => updateFormField('moderation_message', e.target.value)}
+                      placeholder="Visible to user: explain why the profile is hidden..."
+                      className="bg-white border-orange-200 min-h-[120px] text-sm"
+                    />
+                  </div>
+
+                  {/* Verification code helper */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-3">
+                    <Label className="text-xs font-bold text-slate-500 uppercase flex items-center justify-between">
+                      Verification Code / Branded Username
+                      <Badge variant="outline" className="text-[10px] border-blue-100 text-blue-600 font-bold">MANUAL OVERRIDE</Badge>
+                    </Label>
+                    <div className="flex gap-2">
                       <Input 
-                        type="number"
-                        value={editForm.total_verified_followers_count || 0} 
-                        onChange={(e) => updateFormField('total_verified_followers_count', Number(e.target.value))}
-                        className="bg-slate-50"
+                        value={editForm.verification_code || ''} 
+                        onChange={(e) => updateFormField('verification_code', e.target.value)}
+                        className="font-mono font-bold tracking-widest text-center h-10 bg-slate-50"
                       />
+                      <Button variant="outline" className="border-slate-200 hover:bg-slate-50 font-bold text-xs px-4" onClick={() => {
+                        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+                        updateFormField('verification_code', code);
+                      }}>GENERATE</Button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="mx-auto"></div>
-                    <div className="space-y-2">
-                      <Label>Engagement Rate (%)</Label>
-                      <Input 
-                        type="number"
-                        step="0.1"
-                        value={editForm.engagement_rate || ''} 
-                        onChange={(e) => updateFormField('engagement_rate', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Active Platforms */}
-                  <div className="space-y-3 pt-2">
-                    <Label className="text-sm font-bold">Active Platforms (Icons to show)</Label>
-                    <div className="flex flex-wrap gap-3">
-                      {['Instagram', 'YouTube', 'Twitter'].map(plat => (
-                        <div key={plat} className="flex items-center space-x-2 border rounded-full px-4 py-2 bg-white shadow-sm">
-                          <input 
-                            type="checkbox"
-                            checked={(editForm.platforms || []).includes(plat)}
-                            onChange={(e) => {
-                              const current = editForm.platforms || [];
-                              const next = e.target.checked 
-                                ? [...current, plat] 
-                                : current.filter((p: string) => p !== plat);
-                              updateFormField('platforms', next);
-                            }}
-                            className="h-4 w-4"
-                          />
-                          <span className="text-sm">{plat}</span>
+                  {/* Social Links */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4">
+                    <Label className="text-xs font-bold text-slate-900 border-b pb-2 flex items-center gap-2 uppercase tracking-tighter">
+                      <Globe className="h-3.5 w-3.5 text-blue-600" />
+                      Social Profile URLs
+                    </Label>
+                    <div className="space-y-3">
+                      {[
+                        { label: 'Instagram', field: 'instagram_url', icon: Instagram },
+                        { label: 'YouTube', field: 'youtube_url', icon: Youtube },
+                        { label: 'Twitter / X', field: 'twitter_url', icon: Twitter },
+                        { label: 'Main Website', field: 'website', icon: LinkIcon },
+                      ].map((link) => (
+                        <div key={link.field} className="space-y-1">
+                          <Label className="text-[9px] uppercase font-bold text-slate-400 ml-1">{link.label}</Label>
+                          <div className="flex gap-2 group">
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg px-2 flex items-center group-focus-within:border-blue-200 transition-colors">
+                              <link.icon className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-blue-500" />
+                            </div>
+                            <Input 
+                              value={editForm[link.field] || ''} 
+                              onChange={(e) => updateFormField(link.field, e.target.value)}
+                              className="h-10 text-xs border-slate-200 focus:ring-1 focus:ring-blue-100"
+                              placeholder="https://..."
+                            />
+                            {editForm[link.field] && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-10 w-10 text-blue-500 bg-blue-50 hover:bg-blue-100 rounded-lg"
+                                onClick={() => window.open(editForm[link.field], '_blank')}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
-
-                  <div className="space-y-4 pt-4 border-t">
-                    <h4 className="font-semibold text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> Social Profile Links</h4>
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs flex items-center gap-1 font-bold text-slate-700">
-                          <Instagram className="h-3 w-3" /> Instagram URL
-                        </Label>
-                        <Input 
-                          value={editForm.instagram_url || ''} 
-                          onChange={(e) => updateFormField('instagram_url', e.target.value)}
-                          className={!editForm.instagram_url ? "border-orange-100 bg-orange-50/10" : ""}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs flex items-center gap-1 font-bold text-slate-700">
-                          <Youtube className="h-3 w-3" /> YouTube URL
-                        </Label>
-                        <Input 
-                          value={editForm.youtube_url || ''} 
-                          onChange={(e) => updateFormField('youtube_url', e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs flex items-center gap-1 font-bold text-slate-700">
-                          <Twitter className="h-3 w-3" /> Twitter URL
-                        </Label>
-                        <Input 
-                          value={editForm.twitter_url || ''} 
-                          onChange={(e) => updateFormField('twitter_url', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Brand Specific */}
-              {activeTab === 'brand' && (
-                <div className="space-y-4 pt-4 border-t">
-                  <h4 className="font-semibold text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> Brand Presence</h4>
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1"><LinkIcon className="h-3 w-3" /> Website</Label>
-                      <Input 
-                        value={editForm.website || ''} 
-                        onChange={(e) => updateFormField('website', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Business Title / Tagline</Label>
-                      <Input 
-                        value={editForm.brand_tagline || ''} 
-                        onChange={(e) => updateFormField('brand_tagline', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+                </TabsContent>
+              </Tabs>
             </div>
-            )}
-          </div>
+          )}
 
-          <SheetFooter className="p-6 bg-white border-t mt-auto shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+          <SheetFooter className="p-6 bg-white border-t mt-auto sticky bottom-0 z-10 flex gap-3 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
             <Button 
-              className="w-full gap-2 h-12 text-base font-bold shadow-lg shadow-blue-200"
+              variant="ghost" 
+              className="flex-1 font-bold text-slate-400 hover:text-slate-600" 
+              onClick={() => setIsSheetOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              className="flex-[2] bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 font-bold gap-2 h-11" 
               onClick={handleSave}
               disabled={isSaving}
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Saving Changes...
                 </>
               ) : (
                 <>
-                  <Save className="h-5 w-5" />
-                  Save Moderation Changes
+                  <Save className="h-4 w-4" />
+                  Save Changes
                 </>
               )}
             </Button>

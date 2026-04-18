@@ -287,6 +287,7 @@ const EditInfluencerProfile = () => {
         twitter_url: twitterUrl.trim() || null,
         avatar_url: avatarUrl,
         verification_code: verificationCode,
+        email: user.email,
       })
       .eq("id", profileId);
 

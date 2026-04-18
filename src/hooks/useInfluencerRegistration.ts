@@ -222,6 +222,7 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
       twitter_url: form.twitterUrl || null,
       verification_code: form.verificationCode,
       avatar_url: form.avatarUrl,
+      email: user.email,
     };
 
     const { data, error } = await supabase

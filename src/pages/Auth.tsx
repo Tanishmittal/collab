@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Mail, Lock, ArrowRight, Sparkles, Users, Zap, Star } from "lucide-react";
+import { Mail, Lock, ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,12 +19,6 @@ declare global {
     google: any;
   }
 }
-
-const stats = [
-  { value: "10K+", label: "Creators", icon: Users },
-  { value: "5K+", label: "Brands", icon: Zap },
-  { value: "50K+", label: "Collaborations", icon: Star },
-];
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -210,18 +204,6 @@ const Auth = () => {
               <p className="mt-6 max-w-lg text-lg leading-8 text-slate-300">
                 Connect with Instagram, YouTube, and Twitter creators. Launch campaigns, manage collaborations, and grow your brand in one polished workspace.
               </p>
-
-              <div className="mt-10 grid max-w-lg grid-cols-3 gap-4">
-                {stats.map((stat) => (
-                  <div key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-orange-300">
-                      <stat.icon className="h-4 w-4" />
-                    </div>
-                    <div className="text-2xl font-bold text-white">{stat.value}</div>
-                    <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">{stat.label}</div>
-                  </div>
-                ))}
-              </div>
             </div>
 
             <div className="flex flex-wrap gap-3 text-xs font-medium text-slate-300">
