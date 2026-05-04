@@ -24,10 +24,6 @@ export interface InfluencerFormData {
   igFollowers: string;
   ytFollowers: string;
   twitterFollowers: string;
-  igVerified: boolean;
-  ytVerified: boolean;
-  twitterVerified: boolean;
-  verificationCode: string;
 }
 
 export const PLATFORMS = [
@@ -63,34 +59,19 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
     priceStory: "",
     priceVisit: "",
     avatarUrl: null,
-    isVerified: false,
     instagramUrl: "",
     youtubeUrl: "",
     twitterUrl: "",
     igFollowers: "",
     ytFollowers: "",
     twitterFollowers: "",
-    igVerified: false,
-    ytVerified: false,
-    twitterVerified: false,
-    verificationCode: "", // Now stores just the slug
-    slug: "", // Helper for the branded string
   });
 
   const update = (
-    field: keyof InfluencerFormData | "slug",
+    field: keyof InfluencerFormData,
     value: string | string[] | number | boolean | null
   ) => {
-    setForm((prev) => {
-      const next = { ...prev, [field]: value };
-      
-      // Keep verificationCode synced with slug if slug is edited
-      if (field === "slug") {
-        next.verificationCode = value as string;
-      }
-      
-      return next;
-    });
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const findUniqueSlug = async (baseName: string) => {
@@ -136,15 +117,6 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
   };
 
   const nextStep = async () => {
-    if (step === 0 && !form.verificationCode) {
-      // On moving from name step, generate the unique slug
-      const uniqueSlug = await findUniqueSlug(form.name);
-      setForm(prev => ({ 
-        ...prev, 
-        slug: uniqueSlug,
-        verificationCode: uniqueSlug 
-      }));
-    }
     setStep((prev) => prev + 1);
   };
 
@@ -159,12 +131,12 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
         const hasYtInput = form.youtubeUrl.trim().length > 0;
         const hasTwitterInput = form.twitterUrl.trim().length > 0;
         
-        // If they entered a handle, they MUST enter followers if not verified
-        if (hasIgInput && !form.igVerified && !form.igFollowers) return false;
-        if (hasYtInput && !form.ytVerified && !form.ytFollowers) return false;
-        if (hasTwitterInput && !form.twitterVerified && !form.twitterFollowers) return false;
+        // If they entered a handle, they must also enter followers
+        if (hasIgInput && !form.igFollowers) return false;
+        if (hasYtInput && !form.ytFollowers) return false;
+        if (hasTwitterInput && !form.twitterFollowers) return false;
         
-        // ADDED: Must have at least one platform with followers > 0 total to proceed
+        // Must have at least one platform with followers > 0
         const totalFollowers = 
           (Number.parseInt(form.igFollowers, 10) || 0) + 
           (Number.parseInt(form.ytFollowers, 10) || 0) + 
@@ -197,6 +169,9 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
 
     setSubmitting(true);
 
+    // Generate a unique slug at submission time
+    const slug = await findUniqueSlug(form.name);
+
     const profileData = {
       user_id: user.id,
       name: form.name,
@@ -212,15 +187,15 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
       yt_subscribers: Number.parseInt(form.ytFollowers, 10) || 0,
       twitter_followers: Number.parseInt(form.twitterFollowers, 10) || 0,
 
-      platforms: form.platforms,
+      platforms: [] as string[],
       price_reel: Number.parseInt(form.priceReel, 10) || 0,
       price_story: Number.parseInt(form.priceStory, 10) || 0,
       price_visit: Number.parseInt(form.priceVisit, 10) || 0,
-      is_verified: form.igVerified || form.ytVerified || form.twitterVerified,
+      is_verified: false,
       instagram_url: form.instagramUrl || null,
       youtube_url: form.youtubeUrl || null,
       twitter_url: form.twitterUrl || null,
-      verification_code: form.verificationCode,
+      verification_code: slug,
       avatar_url: form.avatarUrl,
       email: user.email,
     };
@@ -257,15 +232,11 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
     }
 
     toast({
-      title: "Profile created",
-      description: "Your creator profile is now live and ready for brands to discover.",
+      title: "Profile created! 🎉",
+      description: "Your creator profile is live. Verify your socials from your profile to get discovered faster.",
     });
 
-    if (data?.id) {
-      navigate(`/influencer/${data.id}`);
-    } else {
-      navigate("/");
-    }
+    navigate("/");
 
     onSuccess?.();
   };
@@ -279,6 +250,5 @@ export const useInfluencerRegistration = (onSuccess?: () => void) => {
     canProceed,
     handleSubmit,
     nextStep,
-    isValidatingSlug
   };
 };

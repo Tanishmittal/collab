@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Save, Loader2, ArrowLeft } from "lucide-react";
+import { Save, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import AvatarUpload from "@/components/AvatarUpload";
 import PortfolioMediaUpload from "@/components/PortfolioMediaUpload";
@@ -373,6 +373,28 @@ const EditInfluencerProfile = () => {
             </div>
           </div>
         </div>
+
+        {/* Verification nudge for unverified profiles */}
+        {!hasVerifiedPlatforms && (
+          <div className="rounded-2xl border border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50 p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-600">
+                <ShieldCheck size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-teal-900">Verify your social accounts</p>
+                <p className="text-xs text-teal-700 mt-0.5">Verified profiles get discovered faster by brands and unlock auto-synced follower counts.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => verificationRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                className="shrink-0 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider hover:bg-teal-700 transition-colors"
+              >
+                Verify Now →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Personal Info */}
         <Card className="glass-card">

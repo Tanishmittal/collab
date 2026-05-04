@@ -18,7 +18,6 @@ const RegisterInfluencer = () => {
     canProceed, 
     handleSubmit, 
     nextStep, 
-    isValidatingSlug 
   } = useInfluencerRegistration(() => {
     navigate("/");
   });
@@ -64,7 +63,6 @@ const RegisterInfluencer = () => {
               canProceed={canProceed}
               handleSubmit={handleSubmit}
               nextStep={nextStep}
-              isValidatingSlug={isValidatingSlug}
             />
           </div>
         </div>
